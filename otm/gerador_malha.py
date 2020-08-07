@@ -16,7 +16,8 @@ from loguru import logger
 from random import uniform
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
-from matplotlib.collections import PathCollection
+from matplotlib import patches
+from matplotlib.collections import PathCollection, PatchCollection
 import zipfile
 from otm.leitura_arquivos import *
 
@@ -754,24 +755,14 @@ class GeradorMalha:
         elementos_poli = []
         elementos_barra = []
         for el in elementos:
-            codes = []
-            verts = []
             if len(el) == 2:
                 verts = [nos[el[0]], nos[el[1]]]
                 codes = [Path.MOVETO, Path.LINETO]
                 elementos_barra.append(Path(verts, codes))
             elif len(el) > 2:
-                for i, v in enumerate(nos[j] for j in el):
-                    verts.append(v)
-                    if i == 0:
-                        codes.append(Path.MOVETO)
-                    else:
-                        codes.append(Path.LINETO)
-                verts.append(verts[0])
-                codes.append(Path.CLOSEPOLY)
-                elementos_poli.append(Path(verts, codes))
+                elementos_poli.append(patches.Polygon(nos[el], linewidth=0.5, facecolor='None', edgecolor='black'))
 
-        ax.add_collection(PathCollection(elementos_poli, linewidths=0.7, edgecolors='black', facecolors='white'))
+        ax.add_collection(PatchCollection(elementos_poli, match_original=True))
         ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
 
         # Enumerar os pontos

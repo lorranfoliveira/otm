@@ -431,7 +431,6 @@ class OC:
         plt.rcParams['font.family'] = 'Calibri'
 
         elementos = self.vetor_elementos
-        vertices = self.nos
 
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
@@ -446,23 +445,12 @@ class OC:
 
         elementos_poli = []
         for j, el in enumerate(elementos):
-            codes = []
-            verts = []
-            for i, v in enumerate(vertices[j] for j in el):
-                verts.append(v)
-                if i == 0:
-                    codes.append(Path.MOVETO)
-                else:
-                    codes.append(Path.LINETO)
-            verts.append(verts[0])
-            codes.append(Path.CLOSEPOLY)
-
             if tipo_cmap == 'jet':
-                elementos_poli.append(PathPatch(Path(verts, codes), linewidth=0, fill=True,
-                                                facecolor=cm.jet(self.rho[j])))
+                elementos_poli.append(patches.Polygon(self.nos[el], linewidth=0, fill=True,
+                                                      facecolor=cm.jet(self.rho[j])))
             else:
-                elementos_poli.append(PathPatch(Path(verts, codes), linewidth=0, fill=True,
-                                                facecolor=cm.binary(self.rho[j])))
+                elementos_poli.append(patches.Polygon(self.nos[el], linewidth=0, fill=True,
+                                                      facecolor=cm.binary(self.rho[j])))
 
         # Adicionar marcador do diâmetro mínimo dos elementos
         path_diam_verts = [[xmax - self.rmin * 2 - 0.01 * dx, ymax - 0.01 * dx],
@@ -471,7 +459,7 @@ class OC:
         path_diam = Path(path_diam_verts, path_diam_codes)
         ax.add_patch(patches.PathPatch(path_diam, linewidth=2, color='magenta'))
 
-        ax.add_collection(PatchCollection(elementos_poli, match_original=True))
+        ax.add_collection(PatchCollection(elementos_poli, match_original=True, antialiased=False))
         # ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
         plt.axis('off')
         plt.grid(b=None)
