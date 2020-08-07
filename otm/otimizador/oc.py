@@ -301,7 +301,7 @@ class OC:
         n = len(x)
         x_novo = np.zeros(n)
 
-        if self.tecnica_otimizacao!=0:
+        if (self.tecnica_otimizacao != 0) and (beta != 0):
             x_min = -1 / beta * np.log(1 - self.rho_min)
         else:
             x_min = self.rho_min
