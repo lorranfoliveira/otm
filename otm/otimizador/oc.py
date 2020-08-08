@@ -345,7 +345,7 @@ class OC:
         u_antigo = np.ones(self.num_nos * 2)
         # Contador global
         t = 0
-        beta_max = 200
+        beta_max = 150
         erro_u = 100
 
         def otm(p, beta):
