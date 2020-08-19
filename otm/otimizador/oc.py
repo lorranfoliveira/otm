@@ -19,7 +19,7 @@ class OC:
     """Classe que implementa as características do problema de otimização pelo Optimality Criteria.
     Arquivos necessários: matrizes_elementos.npz, vetor_forcas.npz
     """
-    metodo_heaviside = 0
+    METODO_HEAVISIDE = 0
 
     def __init__(self, arquivo_dados_entrada: str, x_inicial=0.5, p=3, rho_min=1e-3, rmin=0, tecnica_otimizacao=0,
                  esquema_projecao=0):
@@ -183,7 +183,7 @@ class OC:
             pesos = self.pesos_nos[i][:, 1]
             mi = (self.x[ids_nos] @ pesos) / np.sum(pesos)
             # Adição da não linearidade
-            rho[i] = self.heaviside(mi, beta, OC.metodo_heaviside)
+            rho[i] = self.heaviside(mi, beta, OC.METODO_HEAVISIDE)
 
         return rho
 
@@ -268,7 +268,7 @@ class OC:
             soma_pesos = np.sum(pesos)
             # Não linearidade
             mi = (self.x[ids_nos] @ pesos) / soma_pesos
-            diff_rhoe_rhon = self.heaviside(mi, beta, OC.metodo_heaviside, True) * pesos / soma_pesos
+            diff_rhoe_rhon = self.heaviside(mi, beta, OC.METODO_HEAVISIDE, True) * pesos / soma_pesos
             sens_fo[ids_nos] += sens_el * diff_rhoe_rhon
             sens_vol[ids_nos] += vols[i] * diff_rhoe_rhon
 
