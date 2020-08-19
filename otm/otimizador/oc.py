@@ -20,6 +20,7 @@ class OC:
     Arquivos necessários: matrizes_elementos.npz, vetor_forcas.npz
     """
     METODO_HEAVISIDE = 0
+    BETA_MAX = 150
 
     def __init__(self, arquivo_dados_entrada: str, x_inicial=0.5, p=3, rho_min=1e-3, rmin=0, tecnica_otimizacao=0,
                  esquema_projecao=0):
@@ -345,7 +346,6 @@ class OC:
         u_antigo = np.ones(self.num_nos * 2)
         # Contador global
         t = 0
-        beta_max = 150
         erro_u = 100
 
         def otm(p, beta):
@@ -412,11 +412,11 @@ class OC:
             beta_i = (1 / 3)  # 1.5 * 1/3 = 0.5
             for i in range(num_max_iteracoes):
                 dens = self.percentual_densidades_intermediarias()
-                if beta_i < beta_max:
+                if beta_i < OC.BETA_MAX:
                     if dens >= 5:
-                        beta_i = min(1.5 * beta_i, beta_max)
+                        beta_i = min(1.5 * beta_i, OC.BETA_MAX)
                     elif 1 <= dens < 5:
-                        beta_i = min(beta_i + 5, beta_max)
+                        beta_i = min(beta_i + 5, OC.BETA_MAX)
                     else:
                         break
                     otm(self.p, beta_i)
