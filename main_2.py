@@ -48,5 +48,6 @@ otimizador = OC(arq, x_inicial=x_ini, p=5, rmin=rmin, tecnica_otimizacao=0, esqu
 # otimizador = OC(arq, x_inicial=x_ini, p=5, rmin=rmin, tecnica_otimizacao=1, esquema_projecao=1)
 # otimizador = OC(arq, x_inicial=x_ini, p=3, rmin=rmin, tecnica_otimizacao=2, esquema_projecao=1)
 otimizador.otimizar()
+otimizador.otimizar_estrutura(passo=0.5)
 otimizador.plotar_estrutura_otimizada()
 # otimizador.plotar_estrutura_otimizada('binary')

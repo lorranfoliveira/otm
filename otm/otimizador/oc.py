@@ -331,7 +331,7 @@ class OC:
 
         return x_novo
 
-    def otimizar(self, erro_max=1e-1, passo=0.5, num_max_iteracoes=50):
+    def otimizar_estrutura(self, erro_max=1e-1, passo=0.5, num_max_iteracoes=50):
         """Aplica o processo de otimização aos dados da estrutura.
 
         Se o passo for -1, apenas um valor de p será rodado
