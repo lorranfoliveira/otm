@@ -3,13 +3,13 @@ from loguru import logger
 from typing import List
 from scipy.sparse import coo_matrix, csr_matrix
 import numpy as np
-from otm.constantes import ARQ_ENTRADA_DADOS
+from otm.constantes import ARQUIVOS_DADOS_ZIP
 import matplotlib.pyplot as plt
 from matplotlib.collections import PathCollection
 from matplotlib.path import Path
 from matplotlib import patches
 import os
-from otm.leitura_arquivos import *
+from otm.manipulacao_arquivos import *
 from scipy.sparse.csgraph import reverse_cuthill_mckee
 from typing import Union
 from julia import Main
@@ -52,7 +52,7 @@ class Estrutura:
 
     def salvar_vetor_forcas(self):
         """Salva o vetor de forças da estrutura no arquivo .zip"""
-        arq = self.arquivo.parent.joinpath(ARQ_ENTRADA_DADOS[4])
+        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[4])
 
         with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
             if arq.name not in arq_zip.namelist():
@@ -68,7 +68,7 @@ class Estrutura:
 
     def salvar_vetor_apoios(self):
         """Salva o vetor de apoios da estrutura no arquivo .zip"""
-        arq = self.arquivo.parent.joinpath(ARQ_ENTRADA_DADOS[6])
+        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[6])
 
         with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
             if arq.name not in arq_zip.namelist():
@@ -102,7 +102,7 @@ class Estrutura:
         self.salvar_dados_entrada_txt()
 
     def salvar_dados_entrada_txt(self):
-        arq = self.arquivo.parent.joinpath(ARQ_ENTRADA_DADOS[12])
+        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[12])
 
         with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
             if arq.name not in arq_zip.namelist():
@@ -158,7 +158,7 @@ class Estrutura:
 
     def salvar_graus_liberdade_estrutura(self):
 
-        arq = self.arquivo.parent.joinpath(ARQ_ENTRADA_DADOS[9])
+        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[9])
 
         with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
             if arq.name not in arq_zip.namelist():
@@ -196,7 +196,7 @@ class Estrutura:
         k = csr_matrix((termos, (linhas - 1, colunas - 1)), shape=(ngl, ngl))
 
         rcm = reverse_cuthill_mckee(k)
-        arq = self.arquivo.parent.joinpath(ARQ_ENTRADA_DADOS[11])
+        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[11])
 
         with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
             if arq.name not in arq_zip.namelist():
@@ -219,7 +219,7 @@ class Estrutura:
 
     def salvar_graus_liberdade_elementos(self):
         """Salva os graus de liberdade dos elementos no arquivo .zip"""
-        arq = self.arquivo.parent.joinpath(ARQ_ENTRADA_DADOS[5])
+        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[5])
 
         with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
             if arq.name not in arq_zip.namelist():
@@ -245,7 +245,7 @@ class Estrutura:
 
     def salvar_volumes_elementos(self):
         """Salva os graus de liberdade dos elementos no arquivo .zip"""
-        arq = self.arquivo.parent.joinpath(ARQ_ENTRADA_DADOS[8])
+        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[8])
 
         with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
             if arq.name not in arq_zip.namelist():
@@ -276,7 +276,7 @@ class Estrutura:
 
     def salvar_matrizes_de_rigidez_elementos(self):
         """Adiciona as matrizes de rigidez dos elementos no arquivo zip"""
-        arq = self.arquivo.parent.joinpath(ARQ_ENTRADA_DADOS[7])
+        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[7])
 
         with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
             if arq.name not in arq_zip.namelist():
@@ -350,7 +350,7 @@ class Estrutura:
         # Interface Julia
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
-        arqs = ARQ_ENTRADA_DADOS
+        arqs = ARQUIVOS_DADOS_ZIP
         # Leitura Julia
         arqs_julia = [arqs[7], arqs[5], arqs[9], arqs[6], arqs[4], arqs[11]]
         with zipfile.ZipFile(arquivo, 'r') as arq_zip:
