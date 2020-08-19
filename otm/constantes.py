@@ -1,5 +1,5 @@
 # Palavras chave dos arquivos de entrada e de saída de dados
-_prefixos_chave = ['MALHA', 'ANALISE', 'OTIMIZACAO']
+_prefixos_chave = ['MALHA', 'ANALISE', 'OTIMIZACAO', 'RESULTADOS']
 
 ARQUIVOS_DADOS_ZIP = {0: f'{_prefixos_chave[0]}_elementos.npz',
                       1: f'{_prefixos_chave[0]}_nos.npy',
@@ -14,7 +14,9 @@ ARQUIVOS_DADOS_ZIP = {0: f'{_prefixos_chave[0]}_elementos.npz',
                       10: f'{_prefixos_chave[0]}_poligono_dominio_estendido.wkb',
                       11: f'{_prefixos_chave[1]}_vetor_reverse_cuthill_mckee.npy',
                       12: f'{_prefixos_chave[1]}_dados_entrada_txt.txt',
-                     13: f'{_prefixos_chave[2]}_pesos_nos.npz'}
+                      13: f'{_prefixos_chave[2]}_pesos_nos.npz',
+                      14: f'{_prefixos_chave[3]}_resultados_rho.npy',
+                      15: f'{_prefixos_chave[3]}_resultados_gerais.npy'}
 # Inserir a matriz B no arquivo para a utilização do concreto como material ortotrópico
 
 ARQ_SAIDA_DADOS = {0: 'OTIMIZACAO_variaveis_projeto_por_iteracao.npz',

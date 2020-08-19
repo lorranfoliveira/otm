@@ -4,13 +4,13 @@ from otm.manipulacao_arquivos import *
 from matplotlib import pyplot as plt
 from matplotlib.path import Path
 from matplotlib.collections import PatchCollection
-from matplotlib.patches import PathPatch
 from matplotlib import patches
 from matplotlib import cm
 from otm.constantes import ARQUIVOS_DADOS_ZIP
 from julia import Main
 from scipy.spatial import KDTree
 import os
+import pathlib
 from typing import Tuple
 from zipfile import ZipFile
 
@@ -19,10 +19,19 @@ class OC:
     """Classe que implementa as características do problema de otimização pelo Optimality Criteria.
     Arquivos necessários: matrizes_elementos.npz, vetor_forcas.npz
     """
+    # Método utilizado para a representação da função Heaviside suavizda.
+    # 0 -> Guest (2004)
+    # 1 -> Sigmund (2007)
+    # 2 -> Xu et al. (2010).
     METODO_HEAVISIDE = 0
+    # Máximo valor que pode ser assumido por beta.
     BETA_MAX = 150
+    # Quantidade mínima de iterações.
+    NUM_MIN_ITERS = 5
+    # Quantidade máxima de iterações.
+    NUM_MAX_ITERS = 50
 
-    def __init__(self, arquivo_dados_entrada: str, x_inicial=0.5, p=3, rho_min=1e-3, rmin=0, tecnica_otimizacao=0,
+    def __init__(self, arquivo: pathlib.Path, x_inicial=0.5, p=3, rho_min=1e-3, rmin=0, tecnica_otimizacao=0,
                  esquema_projecao=0):
         """Se rmin == 0, a otimização será feita sem a aplicação do esquema de projeção
 
@@ -34,7 +43,7 @@ class OC:
 
         """
         self.x_inicial: float = x_inicial
-        self.arquivo = arquivo_dados_entrada
+        self.arquivo = arquivo
         self.p = p
         self.rho_min = rho_min
         self.rmin = rmin
@@ -209,7 +218,7 @@ class OC:
         Args:
             rho: Densidade do elemento.
             beta: Parâmetro que define o nível de suavidade da função Heaviside.
-            metodo: Método utilizado para a representação da função Heaviside suavizda.
+            metodo: Método utilizado para a representação da função Heaviside regularizada.
                 0=Guest (2004), 1=Sigmund (2007) e 2=Xu et al. (2010).
             derivada: True para o cálculo da derivada da função e False para o cálculo apenas da função.
 
@@ -275,7 +284,7 @@ class OC:
 
         return sens_fo, sens_vol
 
-    def percentual_densidades_intermediarias(self) -> float:
+    def percent_di(self) -> float:
         """Retorna o percentual de densidades intermediárias da topologia"""
         return 100 * sum(4 * rho * (1 - rho) for rho in self.rho) / len(self.rho)
 
@@ -331,35 +340,59 @@ class OC:
 
         return x_novo
 
-    def otimizar_estrutura(self, erro_max=1e-1, passo=0.5, num_max_iteracoes=50):
+    def otimizar_estrutura(self, erro_max=0.1, passo=0.5, num_max_iteracoes=50):
         """Aplica o processo de otimização aos dados da estrutura.
 
         Se o passo for -1, apenas um valor de p será rodado
         """
         logger.info('Iniciando a otimização da estrutura')
-        # Vetor de coeficientes de penalização
-        if passo != -1:
-            ps = np.arange(1, self.p + 0.1, passo)
-        else:
-            ps = [self.p]
+
+        # Variáveis para o auxílio do salvamento dos resultados no arquivo.
+        # Vetor com as densidades relativas dos elementos. Cada linha corresponde a uma iteração, sendo
+        # que último valor (resultados_rho[-1]) correspondente às densidades relativas da topologia final.
+        resultados_rho = []
+
+        # Matriz que contém os demais resultados. Cada linha representa uma iteração, assim como
+        # ocorre com `resultados_rho`. Os índices obededecem a seguinte ordem:
+        # 0 -> Id da iteração para valores constantes de `p` e `beta`, ou `c` (do código abaixo).
+        # 1 -> `p`.
+        # 2 -> `beta`.
+        # 3 -> Valor da função objetivo.
+        # 4 -> Percentual de volume da estrutura após a otimização em relação ao volume inicial.
+        # 5 -> Percentual de densidades intermediárias.
+        # 6 -> Erro relacionado aos deslocamentos.
+        # 7 -> Erro relacionado ao percentual de densidades intermediárias.
+        resultados_gerais = []
+
         # Último vetor de deslocamentos
-        u_antigo = np.ones(self.num_nos * 2)
-        # Contador global
-        t = 0
-        erro_u = 100
+        u_ant = np.zeros(self.num_nos * 2)
+        # Contador de iterações global
+        it = 0
 
-        def otm(p, beta):
-            nonlocal u_antigo, t, erro_u
+        def otimizar_p_beta_fixos(p, beta):
+            """Otimiza as variáveis de projeto para um valor fixo de `p` e `beta`. Este processo é
+            repetido para vários valores de `p` e de `beta` diferentes no método da continuação.
 
-            logger.info(f'{p=}\t {beta=}\n')
+            Args:
+                p: Coeficiente de penalização do modelo SIMP.
+                beta: Coeficiente que define o nível de suavização da função Heaviside regularizada.
+            """
+            logger.info(f'{10 * "-"} {p=}\t {beta=} {10 * "-"}\n')
 
+            nonlocal u_ant, it
+
+            # Erro inicial dado em porcentagem.
+            erro_u = 100
+            # Percentual de densidadaes intermediárias inicial.
+            di_ant = 100
+            # Interface com Julia
             self.julia.p = self.p = p
 
-            di_ant = 100
-
             for c in np.arange(1, num_max_iteracoes + 1):
-                t += 1
+                it += 1
 
+                # As densidades relativas dos elementos são densidades nodais apenas em otimização sem
+                # esquema de projeção. Essa otimização é feita com `tecnica_otimizacao = 0` apenas.
                 if self.tecnica_otimizacao != 0:
                     self.julia.rho = self.rho = self.calcular_densidades_elementos(beta)
                     u = self.deslocamentos()
@@ -369,31 +402,46 @@ class OC:
                     u = self.deslocamentos()
                     self.rho = self.atualizar_x(u)
 
-                # Cálculo do erro
-                di = self.percentual_densidades_intermediarias()
-                # Erro da continuação em beta
+                # Cálculo dos erros.
+                # Erro entre as duas densidades intermediárias mais atuais.
+                di = self.percent_di()
                 erro_di = 100 * abs((di - di_ant) / di_ant)
                 di_ant = di
 
-                # Erro devido aos deslocamentos
+                # Erro entre as duas normas mais recentes dos deslocamentos nodais.
                 if c > 1:
-                    norm1 = np.linalg.norm(u_antigo)
-                    norm2 = np.linalg.norm(u)
-                    erro_u = 100 * abs((norm1 - norm2) / norm1)
-                u_antigo = u.copy()
+                    norm_u_ant = np.linalg.norm(u_ant)
+                    norm_u = np.linalg.norm(u)
+                    erro_u = 100 * abs((norm_u_ant - norm_u) / norm_u_ant)
+                u_ant = u.copy()
 
+                # Log da iteração.
                 vols = self.volumes_elementos_solidos
-                logger.info(f'i: {t}-{c}\t '
+                # Função objetivo.
+                fo = self.flexibilidade_media(u)
+                # Percentual do volume atual em relação ao volume inicial de material.
+                vol_perc = (self.rho @ vols) / np.sum(vols)
+                logger.info(f'i: {it}-{c}\t '
                             f'p: {p}\t '
                             f'beta: {beta:.2f}\t '
-                            f'fo: {self.flexibilidade_media(u):.2f}\t '
-                            f'vol: {(self.rho @ vols) / np.sum(vols):.3f}%\t '
+                            f'fo: {fo:.2f}\t '
+                            f'vol: {vol_perc:.3f}%\t '
+                            f'di: {di:.3f}%\t'
                             f'erro_u: {erro_u:.5f}%\t '
-                            f'erro_di: {erro_di:.5f}%\t'
-                            f'di: {di:.3f}%')
+                            f'erro_di: {erro_di:.5f}%\t')
 
-                if c > (10 if di > 5 else 5):
-                    if beta != 0:
+                # Adição dos resultados da iteração aos vetores de resultados.
+                resultados_rho.append(self.rho.copy())
+                resultados_gerais.append([c, p, beta, fo, vol_perc, di, erro_u, erro_di])
+
+                # Aplicação dos critérios de convergência.
+                # A convergência ocorre apenas pela variação dos deslocamentos nodais quando `beta = 0`.
+                # Quando `beta` é diferente de 0, a convergência deixa de ocorrer pela variação dos
+                # deslocamentos nodais e passa a ocorrer exclusivamente pela variação do percentual de
+                # densidades intermediárias.
+                # Em cada otimização, pe respeitado um valor mínimo de iterações `OC.NUM_MIN_ITERS`.
+                if c >= OC.NUM_MIN_ITERS:
+                    if beta > 0:
                         if erro_di <= erro_max:
                             logger.info(f'Convergência alcançada pelas densidades intermediárias!')
                             break
@@ -401,27 +449,40 @@ class OC:
                         if erro_u <= erro_max:
                             logger.info(f'Convergência alcançada pelos deslocamentos!')
                             break
+            logger.success(f'Finalizada a otimização para p:{p} e beta:{beta}.\n')
 
-        # Método da continuidade
-        # Continuidade no coeficiente de penalização
-        for j, pi in enumerate(ps):
-            otm(pi, 0)
+        # Método da continuidade.
+        # Vetor iterável de coeficientes de penalização.
+        if passo != -1:
+            ps = np.arange(1, self.p + 0.1, passo)
+        else:
+            ps = [self.p]
 
-        # Continuidade em beta
+        # Continuidade no coeficiente de penalização com `beta = 0`.
+        for p_i in ps:
+            otimizar_p_beta_fixos(p_i, 0)
+
+        # Continuidade em beta.
         if self.tecnica_otimizacao == 2:
-            beta_i = (1 / 3)  # 1.5 * 1/3 = 0.5
+            # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
+            # 1.5 * 1/3 = 0.5
+            beta_i = 1 / 3
             for i in range(num_max_iteracoes):
-                dens = self.percentual_densidades_intermediarias()
+                dens_i = self.percent_di()
                 if beta_i < OC.BETA_MAX:
-                    if dens >= 5:
+                    if dens_i >= 5:
                         beta_i = min(1.5 * beta_i, OC.BETA_MAX)
-                    elif 1 <= dens < 5:
+                    elif 1 <= dens_i < 5:
                         beta_i = min(beta_i + 5, OC.BETA_MAX)
                     else:
                         break
-                    otm(self.p, beta_i)
+                    otimizar_p_beta_fixos(self.p, beta_i)
                 else:
                     break
+
+        # Salvar resultados no arquivo `.zip`.
+        salvar_arquivo_numpy(self.arquivo, np.array(resultados_rho), 14)
+        salvar_arquivo_numpy(self.arquivo, np.array(resultados_gerais), 15)
 
     def plotar_estrutura_otimizada(self, tipo_cmap: str = 'jet'):
         """Exibe a malha final gerada. cmad jet ou binary"""
@@ -466,7 +527,7 @@ class OC:
 
         # Título
         # Fixos
-        di = f'Di: {self.percentual_densidades_intermediarias():.2f}%'
+        di = f'Di: {self.percent_di():.2f}%'
         els = f'NumElems: {self.num_elementos}'
         vf = f'vol: {self.x_inicial}%'
         # Variáveis
