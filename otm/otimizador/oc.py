@@ -1,6 +1,6 @@
 import numpy as np
 from loguru import logger
-from otm.leitura_arquivos import *
+from otm.manipulacao_arquivos import *
 from matplotlib import pyplot as plt
 from matplotlib.path import Path
 from matplotlib.collections import PatchCollection

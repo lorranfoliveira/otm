@@ -9,7 +9,7 @@ from matplotlib.collections import PathCollection
 from matplotlib.path import Path
 from matplotlib import patches
 import os
-from otm.leitura_arquivos import *
+from otm.manipulacao_arquivos import *
 from scipy.sparse.csgraph import reverse_cuthill_mckee
 from typing import Union
 from julia import Main

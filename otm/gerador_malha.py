@@ -19,7 +19,7 @@ from matplotlib.path import Path
 from matplotlib import patches
 from matplotlib.collections import PathCollection, PatchCollection
 import zipfile
-from otm.leitura_arquivos import *
+from otm.manipulacao_arquivos import *
 
 __all__ = ['GeradorMalha']
 

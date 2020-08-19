@@ -1,6 +1,6 @@
 import unittest
 import pathlib
-from otm.leitura_arquivos import *
+from otm.manipulacao_arquivos import *
 import otm.constantes as cte
 import numpy as np
 
