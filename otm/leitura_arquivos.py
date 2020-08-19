@@ -1,6 +1,6 @@
 import numpy as np
 import zipfile
-from otm.constantes import ARQ_ENTRADA_DADOS
+from otm.constantes import ARQUIVOS_DADOS_ZIP
 from typing import Union
 import os
 from shapely.wkb import loads
@@ -25,7 +25,7 @@ def ler_arquivo_entrada_dados_numpy(arquivo: Union[str, pathlib.Path], n: int) -
             Se o arquivo do numpy não for .npy ou .npz.
     """
     # Arquivo do numpy a ser lido
-    arq = ARQ_ENTRADA_DADOS[n]
+    arq = ARQUIVOS_DADOS_ZIP[n]
 
     # Carregamento do arquivo da estrutura (.zip)
     try:
@@ -72,7 +72,7 @@ def ler_arquivo_wkb_shapely(arquivo: Union[str, pathlib.Path], n: int = 10):
             Se o arquivo .wkb não existir dentro do arquivo da estrutura.
 
     """
-    arq_wkb = ARQ_ENTRADA_DADOS[n]
+    arq_wkb = ARQUIVOS_DADOS_ZIP[n]
     # Leitura do arquivo da estrutura (.zip)
     try:
         with zipfile.ZipFile(arquivo, 'r') as arq_zip:

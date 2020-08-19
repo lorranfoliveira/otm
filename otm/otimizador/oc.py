@@ -7,7 +7,7 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import PathPatch
 from matplotlib import patches
 from matplotlib import cm
-from otm.constantes import ARQ_ENTRADA_DADOS
+from otm.constantes import ARQUIVOS_DADOS_ZIP
 from julia import Main
 from scipy.spatial import KDTree
 import os
@@ -109,7 +109,7 @@ class OC:
         # Cálculo dos nós de influência nos elementos pelo esquema de projeção
         if self.tecnica_otimizacao != 0:
             with ZipFile(self.arquivo, 'a') as arq_zip:
-                if (arq := ARQ_ENTRADA_DADOS[13]) not in arq_zip.namelist():
+                if (arq := ARQUIVOS_DADOS_ZIP[13]) not in arq_zip.namelist():
                     self.pesos_nos = self.calcular_funcoes_peso()
                     np.savez(arq, *self.pesos_nos)
                     arq_zip.write(arq)

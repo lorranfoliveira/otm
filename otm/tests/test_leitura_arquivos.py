@@ -87,7 +87,7 @@ class TestLeituraArquivos(unittest.TestCase):
 
         # Testes de exceções
         # Arquivo não suportado pelo numpy
-        with self.assertRaisesRegex(ValueError, f'O arquivo "{cte.ARQ_ENTRADA_DADOS[10]}" não é um arquivo '
+        with self.assertRaisesRegex(ValueError, f'O arquivo "{cte.ARQUIVOS_DADOS_ZIP[10]}" não é um arquivo '
                                                 f'válido do numpy!'):
             ler_arquivo_entrada_dados_numpy(arq_modelo1, 10)
 

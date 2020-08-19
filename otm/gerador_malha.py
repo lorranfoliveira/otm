@@ -8,7 +8,7 @@ from typing import List, Dict, Optional, Tuple, Union
 import numpy as np
 import os
 import pathlib
-from otm.constantes import ARQ_ENTRADA_DADOS
+from otm.constantes import ARQUIVOS_DADOS_ZIP
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.sparse import lil_matrix
 from scipy.spatial import KDTree
@@ -650,23 +650,23 @@ class GeradorMalha:
         arq_elementos = []
         for el in elementos:
             arq_elementos.append(np.array(el))
-        np.savez(ARQ_ENTRADA_DADOS[0], *arq_elementos)
+        np.savez(ARQUIVOS_DADOS_ZIP[0], *arq_elementos)
 
         # Salvar nós
-        np.save(ARQ_ENTRADA_DADOS[1], vertices)
+        np.save(ARQUIVOS_DADOS_ZIP[1], vertices)
 
         # Salvar diâmetro médio dos elementos
-        np.save(ARQ_ENTRADA_DADOS[2],
+        np.save(ARQUIVOS_DADOS_ZIP[2],
                 np.array(self.diametro_medio_elementos(self.poligono_estrutura())))
 
         # Salvar polígono do domínio estendido
-        with open(ARQ_ENTRADA_DADOS[10], 'wb') as arq_wkb:
+        with open(ARQUIVOS_DADOS_ZIP[10], 'wb') as arq_wkb:
             arq_wkb.write(dumps(self.poligono_estrutura()))
 
         # Salvar limites do domínio
         xmin, ymin, xmax, ymax = self.poligono_estrutura().bounds
         esc = 0.1 * max(xmax - xmin, ymax - ymin)
-        np.save(ARQ_ENTRADA_DADOS[3], np.array([xmin - esc, ymin - esc, xmax + esc, ymax + esc]))
+        np.save(ARQUIVOS_DADOS_ZIP[3], np.array([xmin - esc, ymin - esc, xmax + esc, ymax + esc]))
 
         # Salvar arquivo zip e apagar os arquivos salvos
         with zipfile.ZipFile(f'{self.arquivo_dxf.replace(".dxf", "")}.zip', 'w',
@@ -676,8 +676,8 @@ class GeradorMalha:
 
             # Salvar dados da malha
             for i in [0, 1, 2, 3, 10]:
-                arq_zip.write(ARQ_ENTRADA_DADOS[i])
-                os.remove(ARQ_ENTRADA_DADOS[i])
+                arq_zip.write(ARQUIVOS_DADOS_ZIP[i])
+                os.remove(ARQUIVOS_DADOS_ZIP[i])
 
         logger.debug('Arquivo salvo!')
 
