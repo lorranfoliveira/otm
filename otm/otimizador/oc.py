@@ -1,11 +1,6 @@
 import numpy as np
 from loguru import logger
 from otm.manipulacao_arquivos import *
-from matplotlib import pyplot as plt
-from matplotlib.path import Path
-from matplotlib.collections import PatchCollection
-from matplotlib import patches
-from matplotlib import cm
 from otm.constantes import ARQUIVOS_DADOS_ZIP
 from julia import Main
 from scipy.spatial import KDTree
@@ -493,74 +488,3 @@ class OC:
         # Salvar resultados no arquivo `.zip`.
         salvar_arquivo_numpy(self.arquivo, np.array(resultados_rho), 14)
         salvar_arquivo_numpy(self.arquivo, np.array(resultados_gerais), 15)
-
-    def plotar_estrutura_otimizada(self, tipo_cmap: str = 'jet'):
-        """Exibe a malha final gerada. cmad jet ou binary"""
-        logger.info('Criando o desenho da malha final')
-
-        plt.rcParams['pdf.fonttype'] = 42
-        plt.rcParams['font.family'] = 'Calibri'
-
-        elementos = self.vetor_elementos
-
-        fig, ax = plt.subplots()
-        win = plt.get_current_fig_manager()
-        win.window.state('zoomed')
-        ax.axis('equal')
-
-        xmin, ymin, xmax, ymax = ler_arquivo_wkb_shapely(self.arquivo).bounds
-        dx = xmax - xmin
-        dy = ymax - ymin
-        plt.xlim(xmin - 0.1 * dx, xmax + 0.1 * dx)
-        plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
-
-        elementos_poli = []
-        for j, el in enumerate(elementos):
-            if tipo_cmap == 'jet':
-                elementos_poli.append(patches.Polygon(self.nos[el], linewidth=0, fill=True,
-                                                      facecolor=cm.jet(self.rho[j])))
-            else:
-                elementos_poli.append(patches.Polygon(self.nos[el], linewidth=0, fill=True,
-                                                      facecolor=cm.binary(self.rho[j])))
-
-        # Adicionar marcador do diâmetro mínimo dos elementos
-        path_diam_verts = [[xmax - self.rmin * 2 - 0.01 * dx, ymax - 0.01 * dx],
-                           [xmax - 0.01 * dx, ymax - 0.01 * dx]]
-        path_diam_codes = [Path.MOVETO, Path.LINETO]
-        path_diam = Path(path_diam_verts, path_diam_codes)
-        ax.add_patch(patches.PathPatch(path_diam, linewidth=2, color='magenta'))
-
-        ax.add_collection(PatchCollection(elementos_poli, match_original=True, antialiased=False))
-        # ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
-        plt.axis('off')
-        plt.grid(b=None)
-
-        # Título
-        # Fixos
-        di = f'Di: {self.percent_di():.2f}%'
-        els = f'NumElems: {self.num_elementos}'
-        vf = f'vol: {self.x_inicial}%'
-        # Variáveis
-        rmin = ''
-        tecnica_otm = 'Técnica: '
-
-        if self.tecnica_otimizacao == 0:
-            tecnica_otm += 'Sem filtro'
-        elif self.tecnica_otimizacao == 1:
-            rmin = f'Rmin: {self.rmin}'
-            tecnica_otm += 'Linear '
-            if self.esquema_projecao == 0:
-                tecnica_otm += 'Direta'
-            else:
-                tecnica_otm += 'Inversa'
-        else:
-            rmin = f'Rmin: {self.rmin}'
-            tecnica_otm += 'Heaviside '
-            if self.esquema_projecao == 0:
-                tecnica_otm += 'Direta'
-            else:
-                tecnica_otm += 'Inversa'
-
-        plt.title(f'{tecnica_otm}     {els}     {vf}     {di}    {rmin}')
-
-        plt.show()
