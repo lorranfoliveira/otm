@@ -16,10 +16,9 @@ from zipfile import ZipFile
 
 
 class OC:
-    """Classe que implementa as características do problema de otimização pelo Optimality Criteria.
-    Arquivos necessários: matrizes_elementos.npz, vetor_forcas.npz
-    """
-    # Método utilizado para a representação da função Heaviside suavizda.
+    """Classe que implementa as características do problema de otimização pelo Optimality Criteria."""
+
+    # Método utilizado para a representação da função Heaviside regularizada.
     # 0 -> Guest (2004)
     # 1 -> Sigmund (2007)
     # 2 -> Xu et al. (2010).
@@ -30,16 +29,29 @@ class OC:
     NUM_MIN_ITERS = 5
     # Quantidade máxima de iterações.
     NUM_MAX_ITERS = 50
+    # Técnicas de otimização.
+    # 0 -> Sem filtro.
+    # 1 -> Com esquema de projeção linear direto.
+    # 2 -> Com esquema de projeção Heaviside direto.
+    # 3 -> Com esquema de projeção linear inverso.
+    # 4 -> Com esquema de projeção Heaviside inverso.
+    TECNICA_OTM_SEM_FILTRO = [0]
+    TECNICA_OTM_EP_DIRETO = [1, 2]
+    TECNICA_OTM_EP_INVERSO = [3, 4]
+    TECNICA_OTM_EP_LINEAR = [1, 3]
+    TECNICA_OTM_EP_HEAVISIDE = [2, 4]
 
-    def __init__(self, arquivo: pathlib.Path, x_inicial=0.5, p=3, rho_min=1e-3, rmin=0, tecnica_otimizacao=0,
-                 esquema_projecao=0):
+    def __init__(self, arquivo: pathlib.Path, x_inicial: float = 0.5, p: float = 3, rho_min: float = 1e-3,
+                 rmin: float = 0, tecnica_otimizacao: int = 0):
         """Se rmin == 0, a otimização será feita sem a aplicação do esquema de projeção
 
         Args:
             tecnica_otimizacao:
-                0 -> Sem esquema de projeção.
+                0 -> Sem filtro.
                 1 -> Com esquema de projeção linear direto.
-                2 -> Com esquema de projeção não linear direto.
+                2 -> Com esquema de projeção Heaviside direto.
+                3 -> Com esquema de projeção linear inverso.
+                4 -> Com esquema de projeção Heaviside inverso.
 
         """
         self.x_inicial: float = x_inicial
@@ -48,7 +60,6 @@ class OC:
         self.rho_min = rho_min
         self.rmin = rmin
         self.tecnica_otimizacao = tecnica_otimizacao
-        self.esquema_projecao = esquema_projecao
 
         self.matrizes_rigidez_elementos = None
         self.vetor_forcas: np.ndarray = None
@@ -140,15 +151,14 @@ class OC:
         logger.debug(f'Calculando a influência dos nós sobre os elementos...')
 
         def w(r, rmin) -> float:
-            if self.esquema_projecao == 0:
+            if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_DIRETO:
                 # Função de projeção direta
                 return (rmin - r) / rmin
-            elif self.esquema_projecao == 1:
+            elif self.tecnica_otimizacao in OC.TECNICA_OTM_EP_INVERSO:
                 # Função de projeção inversa
                 return r / rmin
 
-            # Vetorização da função
-
+        # Vetorização da função
         vet_w = np.vectorize(w)
 
         kd_nos = KDTree(self.nos)
