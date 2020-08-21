@@ -3,6 +3,7 @@ import pathlib
 from loguru import logger
 from otm.otimizador.oc import OC
 from otm.plotagem import Plot
+from otm.dados import Dados
 
 
 def analisar_estrutura(arquivo):
@@ -29,8 +30,8 @@ arq_dxf = pathlib.Path(__file__).parent.joinpath(f'{arq.name.replace("zip", "dxf
 # analisar_estrutura(arq)
 # print(min(otm.Estrutura.deslocamentos_arquivo(arq)))
 # otm.Estrutura.plotar_estrutura_deformada(arq, 1e-2)
-rmin = 0.25
-x_ini = 0.5
+# rmin = 0.25
+# x_ini = 0.5
 #
 # Sem esquema de projeção
 # otimizador = OC(arq, x_inicial=x_ini, p=5, rmin=0, tecnica_otimizacao=0, esquema_projecao=0)
@@ -38,6 +39,6 @@ x_ini = 0.5
 # otimizador = OC(arq, x_inicial=x_ini, p=3, rmin=rmin, tecnica_otimizacao=2, esquema_projecao=0)
 #
 # otimizador.otimizar_estrutura(passo=0.5)
-
-plot = Plot(arq)
+dados = Dados(arq)
+plot = Plot(dados)
 plot.plotar_malha()
