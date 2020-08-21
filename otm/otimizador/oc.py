@@ -1,11 +1,6 @@
 import numpy as np
 from loguru import logger
 from otm.manipulacao_arquivos import *
-from matplotlib import pyplot as plt
-from matplotlib.path import Path
-from matplotlib.collections import PatchCollection
-from matplotlib import patches
-from matplotlib import cm
 from otm.constantes import ARQUIVOS_DADOS_ZIP
 from julia import Main
 from scipy.spatial import KDTree
@@ -16,10 +11,9 @@ from zipfile import ZipFile
 
 
 class OC:
-    """Classe que implementa as características do problema de otimização pelo Optimality Criteria.
-    Arquivos necessários: matrizes_elementos.npz, vetor_forcas.npz
-    """
-    # Método utilizado para a representação da função Heaviside suavizda.
+    """Classe que implementa as características do problema de otimização pelo Optimality Criteria."""
+
+    # Método utilizado para a representação da função Heaviside regularizada.
     # 0 -> Guest (2004)
     # 1 -> Sigmund (2007)
     # 2 -> Xu et al. (2010).
@@ -30,16 +24,29 @@ class OC:
     NUM_MIN_ITERS = 5
     # Quantidade máxima de iterações.
     NUM_MAX_ITERS = 50
+    # Técnicas de otimização.
+    # 0 -> Sem filtro.
+    # 1 -> Com esquema de projeção linear direto.
+    # 2 -> Com esquema de projeção Heaviside direto.
+    # 3 -> Com esquema de projeção linear inverso.
+    # 4 -> Com esquema de projeção Heaviside inverso.
+    TECNICA_OTM_SEM_FILTRO = [0]
+    TECNICA_OTM_EP_DIRETO = [1, 2]
+    TECNICA_OTM_EP_INVERSO = [3, 4]
+    TECNICA_OTM_EP_LINEAR = [1, 3]
+    TECNICA_OTM_EP_HEAVISIDE = [2, 4]
 
-    def __init__(self, arquivo: pathlib.Path, x_inicial=0.5, p=3, rho_min=1e-3, rmin=0, tecnica_otimizacao=0,
-                 esquema_projecao=0):
+    def __init__(self, arquivo: pathlib.Path, x_inicial: float = 0.5, p: float = 3, rho_min: float = 1e-3,
+                 rmin: float = 0, tecnica_otimizacao: int = 0):
         """Se rmin == 0, a otimização será feita sem a aplicação do esquema de projeção
 
         Args:
             tecnica_otimizacao:
-                0 -> Sem esquema de projeção.
+                0 -> Sem filtro.
                 1 -> Com esquema de projeção linear direto.
-                2 -> Com esquema de projeção não linear direto.
+                2 -> Com esquema de projeção Heaviside direto.
+                3 -> Com esquema de projeção linear inverso.
+                4 -> Com esquema de projeção Heaviside inverso.
 
         """
         self.x_inicial: float = x_inicial
@@ -48,7 +55,6 @@ class OC:
         self.rho_min = rho_min
         self.rmin = rmin
         self.tecnica_otimizacao = tecnica_otimizacao
-        self.esquema_projecao = esquema_projecao
 
         self.matrizes_rigidez_elementos = None
         self.vetor_forcas: np.ndarray = None
@@ -140,15 +146,14 @@ class OC:
         logger.debug(f'Calculando a influência dos nós sobre os elementos...')
 
         def w(r, rmin) -> float:
-            if self.esquema_projecao == 0:
+            if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_DIRETO:
                 # Função de projeção direta
                 return (rmin - r) / rmin
-            elif self.esquema_projecao == 1:
+            elif self.tecnica_otimizacao in OC.TECNICA_OTM_EP_INVERSO:
                 # Função de projeção inversa
                 return r / rmin
 
-            # Vetorização da função
-
+        # Vetorização da função
         vet_w = np.vectorize(w)
 
         kd_nos = KDTree(self.nos)
@@ -483,74 +488,3 @@ class OC:
         # Salvar resultados no arquivo `.zip`.
         salvar_arquivo_numpy(self.arquivo, np.array(resultados_rho), 14)
         salvar_arquivo_numpy(self.arquivo, np.array(resultados_gerais), 15)
-
-    def plotar_estrutura_otimizada(self, tipo_cmap: str = 'jet'):
-        """Exibe a malha final gerada. cmad jet ou binary"""
-        logger.info('Criando o desenho da malha final')
-
-        plt.rcParams['pdf.fonttype'] = 42
-        plt.rcParams['font.family'] = 'Calibri'
-
-        elementos = self.vetor_elementos
-
-        fig, ax = plt.subplots()
-        win = plt.get_current_fig_manager()
-        win.window.state('zoomed')
-        ax.axis('equal')
-
-        xmin, ymin, xmax, ymax = ler_arquivo_wkb_shapely(self.arquivo).bounds
-        dx = xmax - xmin
-        dy = ymax - ymin
-        plt.xlim(xmin - 0.1 * dx, xmax + 0.1 * dx)
-        plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
-
-        elementos_poli = []
-        for j, el in enumerate(elementos):
-            if tipo_cmap == 'jet':
-                elementos_poli.append(patches.Polygon(self.nos[el], linewidth=0, fill=True,
-                                                      facecolor=cm.jet(self.rho[j])))
-            else:
-                elementos_poli.append(patches.Polygon(self.nos[el], linewidth=0, fill=True,
-                                                      facecolor=cm.binary(self.rho[j])))
-
-        # Adicionar marcador do diâmetro mínimo dos elementos
-        path_diam_verts = [[xmax - self.rmin * 2 - 0.01 * dx, ymax - 0.01 * dx],
-                           [xmax - 0.01 * dx, ymax - 0.01 * dx]]
-        path_diam_codes = [Path.MOVETO, Path.LINETO]
-        path_diam = Path(path_diam_verts, path_diam_codes)
-        ax.add_patch(patches.PathPatch(path_diam, linewidth=2, color='magenta'))
-
-        ax.add_collection(PatchCollection(elementos_poli, match_original=True, antialiased=False))
-        # ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
-        plt.axis('off')
-        plt.grid(b=None)
-
-        # Título
-        # Fixos
-        di = f'Di: {self.percent_di():.2f}%'
-        els = f'NumElems: {self.num_elementos}'
-        vf = f'vol: {self.x_inicial}%'
-        # Variáveis
-        rmin = ''
-        tecnica_otm = 'Técnica: '
-
-        if self.tecnica_otimizacao == 0:
-            tecnica_otm += 'Sem filtro'
-        elif self.tecnica_otimizacao == 1:
-            rmin = f'Rmin: {self.rmin}'
-            tecnica_otm += 'Linear '
-            if self.esquema_projecao == 0:
-                tecnica_otm += 'Direta'
-            else:
-                tecnica_otm += 'Inversa'
-        else:
-            rmin = f'Rmin: {self.rmin}'
-            tecnica_otm += 'Heaviside '
-            if self.esquema_projecao == 0:
-                tecnica_otm += 'Direta'
-            else:
-                tecnica_otm += 'Inversa'
-
-        plt.title(f'{tecnica_otm}     {els}     {vf}     {di}    {rmin}')
-
-        plt.show()
