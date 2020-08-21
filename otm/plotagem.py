@@ -23,10 +23,6 @@ class Plot:
             id_y: Identificação da coluna do dado (resultados gerais) a ser representado na abcissa do gráfico.
             titulo: Título do gráfico.
         """
-        # Carregamento dos arquivos.
-        self.dados.carregar_arquivos(*[15])
-
-        # Plotagem
         y = self.dados.resultados_gerais[:, id_y]
         plt.title(titulo)
         plt.plot(y)
@@ -39,13 +35,6 @@ class Plot:
             exibir_numeracao_nos: `True` para exibir a numeração dos nós.
             tamanho_numeracao: Regula o tamanho da numeração dos nós da malha.
         """
-
-        # Carregamento dos arquivos necessários para a plotagem.
-        # 10 -> Polígono do domínio estendido.
-        # 0 -> Elementos.
-        # 1 -> Nós.
-        self.dados.carregar_arquivos(*[10, 0, 1])
-
         logger.info('Criando o desenho da malha final')
 
         # Plotagem.
@@ -92,12 +81,9 @@ class Plot:
         """Exibe a malha final gerada. cmad jet ou binary"""
         logger.info('Criando o desenho da malha final')
 
-        # Carregamento dos arquivos de resultados.
-        self.dados.carregar_arquivos(*[14, 15, 10, 0, 1])
-
         # Resultados finais
-        rho_final = self.dados.rhos_iter_final()
-        results_gerais_finais = self.dados.rhos_iter_final()
+        rho_final = self.dados.rhos_iteracao_final()
+        results_gerais_finais = self.dados.rhos_iteracao_final()
 
         plt.rcParams['pdf.fonttype'] = 42
         plt.rcParams['font.family'] = 'Calibri'
