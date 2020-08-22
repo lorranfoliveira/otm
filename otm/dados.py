@@ -27,27 +27,105 @@ class Dados:
         self.arquivo = arquivo
 
         # Dados da malha.
-        self.elementos: Optional[np.ndarray] = None
-        self.nos: Optional[np.ndarray] = None
-        self.poligono_dominio_estendido: Optional[Polygon] = None
+        self._elementos: Optional[np.ndarray] = None
+        self._nos: Optional[np.ndarray] = None
+        self._poligono_dominio_estendido: Optional[Polygon] = None
 
         # Dados da análise.
-        self.forcas: Optional[np.ndarray] = None
-        self.graus_liberdade_elementos: Optional[List[np.ndarray]] = None
-        self.apoios: Optional[np.ndarray] = None
-        self.k_elems: Optional[List[np.ndarray]] = None
-        self.volumes_elementos: Optional[np.ndarray] = None
-        self.graus_liberdade_estrutura: Optional[np.ndarray] = None
-        self.vetor_reverse_cuthill_mckee: Optional[np.ndarray] = None
+        self._forcas: Optional[np.ndarray] = None
+        self._graus_liberdade_elementos: Optional[List[np.ndarray]] = None
+        self._apoios: Optional[np.ndarray] = None
+        self._k_elems: Optional[List[np.ndarray]] = None
+        self._volumes_elementos_solidos: Optional[np.ndarray] = None
+        self._graus_liberdade_estrutura: Optional[np.ndarray] = None
+        self._rcm: Optional[np.ndarray] = None
 
         # Dados da otimização.
-        self.pesos_esq_proj: Optional[List[np.array]] = None
+        self._pesos_esquema_projecao: Optional[List[np.array]] = None
 
         # Dados dos resultados.
-        self.resultados_rho: Optional[np.ndarray] = None
-        self.resultados_gerais: Optional[np.ndarray] = None
+        self._resultados_rho: Optional[np.ndarray] = None
+        self._resultados_gerais: Optional[np.ndarray] = None
 
-    # region
+    @property
+    def elementos(self) -> List[np.ndarray]:
+        if self._elementos is None:
+            self._elementos = self.ler_arquivo_entrada_dados_numpy(0)
+        return self._elementos
+
+    @property
+    def nos(self) -> np.ndarray:
+        if self._nos is None:
+            self._nos = self.ler_arquivo_entrada_dados_numpy(1)
+        return self._nos
+
+    @property
+    def forcas(self) -> np.ndarray:
+        if self._forcas is None:
+            self._forcas = self.ler_arquivo_entrada_dados_numpy(4)
+        return self._forcas
+
+    @property
+    def graus_liberdade_elementos(self) -> List[np.ndarray]:
+        if self._graus_liberdade_elementos is None:
+            self._graus_liberdade_elementos = self.ler_arquivo_entrada_dados_numpy(5)
+        return self._graus_liberdade_elementos
+
+    @property
+    def apoios(self) -> np.ndarray:
+        if self._apoios is None:
+            self._apoios = self.ler_arquivo_entrada_dados_numpy(6)
+        return self._apoios
+
+    @property
+    def k_elems(self) -> List[np.ndarray]:
+        if self._k_elems is None:
+            self._k_elems = self.ler_arquivo_entrada_dados_numpy(7)
+        return self._k_elems
+
+    @property
+    def volumes_elementos_solidos(self) -> np.ndarray:
+        if self._volumes_elementos_solidos is None:
+            self._volumes_elementos_solidos = self.ler_arquivo_entrada_dados_numpy(8)
+        return self._volumes_elementos_solidos
+
+    @property
+    def graus_liberdade_estrutura(self) -> np.ndarray:
+        if self._graus_liberdade_estrutura is None:
+            self._graus_liberdade_estrutura = self.ler_arquivo_entrada_dados_numpy(9)
+        return self._graus_liberdade_estrutura
+
+    @property
+    def poligono_dominio_estendido(self) -> Polygon:
+        if self._poligono_dominio_estendido is None:
+            self._poligono_dominio_estendido = self.ler_arquivo_wkb_shapely()
+        return self._poligono_dominio_estendido
+
+    @property
+    def rcm(self) -> np.ndarray:
+        if self._rcm is None:
+            self._rcm = self.ler_arquivo_entrada_dados_numpy(11)
+        return self._rcm
+
+    @property
+    def pesos_esquema_projecao(self) -> List[np.ndarray]:
+        if self._pesos_esquema_projecao is None:
+            self._pesos_esquema_projecao = self.ler_arquivo_entrada_dados_numpy(13)
+        return self._pesos_esquema_projecao
+
+    @property
+    def resultados_rho(self) -> np.ndarray:
+        if self._resultados_rho is None:
+            self._resultados_rho = self.ler_arquivo_entrada_dados_numpy(14)
+        return self._resultados_rho
+
+    @property
+    def resultados_gerais(self) -> np.ndarray:
+        if self._resultados_gerais is None:
+            self._resultados_gerais = self.ler_arquivo_entrada_dados_numpy(15)
+        return self._resultados_gerais
+
+    # region Leitura escrita de arquivos
     def ler_arquivo_entrada_dados_numpy(self, n: int) -> Union[np.ndarray, list]:
         """Lê o arquivo de entrada de dados.
 
@@ -98,6 +176,49 @@ class Dados:
             os.remove(arq_str)
             raise ValueError(f'O arquivo "{arq}" não é um arquivo válido do numpy!')
 
+    def salvar_arquivo_numpy(self, dados: Union[np.ndarray, List[np.ndarray]], n: int):
+        """Salva um conjunto de dados em um arquivo do numpy (`.npy` ou `.npz`).
+        O tipo de arquivo a ser salvo é definido automaticamente. Se o conjunto de dados for do tipo
+        `np.ndarray`, será salvo um arquivo `.npy`. Se o conjunto de dados for do tipo `List[np.ndarray]`,
+        será salvo um arquivo com extensão `.npz`.
+
+        Args:
+            dados: Conjunto de dados a serem salvos.
+            n: Número de referência do arquivo no módulo `constantes`.
+        """
+        arq_np = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[n])
+        arq_np_str = str(arq_np)
+        with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
+            if self.arquivo.name not in arq_zip.namelist():
+                logger.info(f'Salvando "{arq_np.name}" em "{self.arquivo.name}..."')
+
+                if arq_np_str.endswith('.npy'):
+                    if isinstance(dados, np.ndarray):
+                        np.save(str(arq_np_str), dados)
+                    else:
+                        raise TypeError(f'Para salvar um arquivo ".npy" é necessário que "dados" seja '
+                                        f'do tipo "np.ndarray".')
+                elif arq_np_str.endswith('.npz'):
+                    if isinstance(dados, list) and all(isinstance(i, np.ndarray) for i in dados):
+                        np.savez(arq_np_str, *dados)
+                    else:
+                        raise TypeError(f'Para salvar um arquivo ".npz" é necessário que "dados" seja '
+                                        f'do tipo "List[np.ndarray]".')
+
+                arq_zip.write(arq_np.name)
+                os.remove(arq_np_str)
+
+    def salvar_arquivo_generico_em_zip(self, nome_arquivo: str):
+        arquivo_generico = self.arquivo.parent.joinpath(nome_arquivo)
+        with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
+            if arquivo_generico.name not in arq_zip.namelist():
+                logger.info(f'Salvando "{arquivo_generico.name}" em "{self.arquivo.name}..."')
+                arq_zip.write(arquivo_generico.name)
+                os.remove(str(arquivo_generico))
+            else:
+                logger.warning(f'O arquivo "{arquivo_generico.name}" já existe em "{self.arquivo.name}" e não '
+                               f'pode ser sobrescrito! Ele deve ser removido para ser substituído.')
+
     def ler_arquivo_wkb_shapely(self):
         """Lê um arquivo de enrada de dados de um arquivo zip
 
@@ -133,58 +254,31 @@ class Dados:
 
     # endregion
 
-    def carregar_arquivos(self, *args):
-        """Carrega os arquivos especificados em `args`. A codificação deve ser a que consta em `constantes`.
-        Arquivos já carregados serão ignorados caso seu carregamento seja novamente solicitado.
+    # region Dados malha
+    def num_nos(self) -> int:
+        """Retorna a quantidade de nós que compõem a malha."""
+        return self.nos.shape[0]
 
-        Args:
-            args: Iterável que contém o código dos arquivos que serão carregados.
-        """
-        if ((n := 0) in args) and (self.elementos is None):
-            self.elementos = self.ler_arquivo_entrada_dados_numpy(n)
+    def num_elementos(self) -> int:
+        """Retorna a quantidade de elementos que compõem a malha."""
+        return len(self.elementos)
 
-        if ((n := 1) in args) and (self.nos is None):
-            self.nos = self.ler_arquivo_entrada_dados_numpy(n)
+    # endregion
 
-        if ((n := 4) in args) and (self.forcas is None):
-            self.forcas = self.ler_arquivo_entrada_dados_numpy(n)
+    # region Dados análise
+    def num_graus_liberdade(self) -> int:
+        """Retorna o número total de graus de liberdade livres e impedidos que a estrutura possui.
+        São considerados 2 graus de liberdade por nó."""
+        return 2 * self.num_nos()
 
-        if ((n := 5) in args) and (self.graus_liberdade_elementos is None):
-            self.graus_liberdade_elementos = self.ler_arquivo_entrada_dados_numpy(n)
-
-        if ((n := 6) in args) and (self.apoios is None):
-            self.apoios = self.ler_arquivo_entrada_dados_numpy(n)
-
-        if ((n := 7) in args) and (self.k_elems is None):
-            self.k_elems = self.ler_arquivo_entrada_dados_numpy(n)
-
-        if ((n := 8) in args) and (self.volumes_elementos is None):
-            self.volumes_elementos = self.ler_arquivo_entrada_dados_numpy(n)
-
-        if ((n := 9) in args) and (self.graus_liberdade_estrutura is None):
-            self.graus_liberdade_estrutura = self.ler_arquivo_entrada_dados_numpy(n)
-
-        if (10 in args) and (self.poligono_dominio_estendido is None):
-            self.poligono_dominio_estendido = self.ler_arquivo_wkb_shapely()
-
-        if ((n := 11) in args) and (self.vetor_reverse_cuthill_mckee is None):
-            self.vetor_reverse_cuthill_mckee = self.ler_arquivo_entrada_dados_numpy(n)
-
-        if ((n := 13) in args) and (self.pesos_esq_proj is None):
-            self.pesos_esq_proj = self.ler_arquivo_entrada_dados_numpy(n)
-
-        if ((n := 14) in args) and (self.resultados_rho is None):
-            self.resultados_rho = self.ler_arquivo_entrada_dados_numpy(n)
-
-        if ((n := 15) in args) and (self.resultados_gerais is None):
-            self.resultados_gerais = self.ler_arquivo_entrada_dados_numpy(n)
+    # endregin
 
     # Resultados
-    def rhos_iter_final(self) -> np.ndarray:
+    def rhos_iteracao_final(self) -> np.ndarray:
         """Retorna um vetor com as densidades relativas dos elementos ao fim da última iteração."""
         return self.resultados_rho[-1]
 
-    def resultados_gerais_iter_final(self)->np.ndarray:
+    def resultados_gerais_iteracao_final(self) -> np.ndarray:
         """Retorna um vetor com os resultado gerais referentes à última iteração da otimização."""
         return self.resultados_gerais[-1]
 
