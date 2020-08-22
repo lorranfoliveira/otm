@@ -1,13 +1,9 @@
 import numpy as np
 from loguru import logger
-from otm.manipulacao_arquivos import *
-from otm.constantes import ARQUIVOS_DADOS_ZIP
 from julia import Main
 from scipy.spatial import KDTree
-import os
-import pathlib
 from typing import Tuple
-from zipfile import ZipFile
+from otm.dados import Dados
 
 
 class OC:
@@ -36,7 +32,7 @@ class OC:
     TECNICA_OTM_EP_LINEAR = [1, 3]
     TECNICA_OTM_EP_HEAVISIDE = [2, 4]
 
-    def __init__(self, arquivo: pathlib.Path, x_inicial: float = 0.5, p: float = 3, rho_min: float = 1e-3,
+    def __init__(self, dados: Dados, x_inicial: float = 0.5, p: float = 3, rho_min: float = 1e-3,
                  rmin: float = 0, tecnica_otimizacao: int = 0):
         """Se rmin == 0, a otimização será feita sem a aplicação do esquema de projeção
 
@@ -50,89 +46,50 @@ class OC:
 
         """
         self.x_inicial: float = x_inicial
-        self.arquivo = arquivo
+        self.dados = dados
         self.p = p
         self.rho_min = rho_min
         self.rmin = rmin
         self.tecnica_otimizacao = tecnica_otimizacao
 
-        self.matrizes_rigidez_elementos = None
-        self.vetor_forcas: np.ndarray = None
-        self.vetor_apoios: np.ndarray = None
-        self.graus_liberdade_elementos = None
-        self.volumes_elementos_solidos = None
-        self.limites_dominio = None
-        self.vetor_elementos = None
-        self.nos = None
-        self.graus_liberdade_estrutura = None
-        self.pesos_nos = None
-
         # Interface Julia
         self.julia = Main
         self.julia.eval('include("julia_core/Deslocamentos.jl")')
 
-        self.ler_dados_entrada_arquivo()
+        self.carregar_interface_julia()
 
         # Densidades dos nós
-        self.x: np.ndarray = np.full(self.num_nos, self.x_inicial)
+        self.x: np.ndarray = np.full(self.dados.num_nos(), self.x_inicial)
         # Densidades dos elementos
-        self.rho: np.ndarray = np.full(self.num_elementos, self.x_inicial)
+        self.rho: np.ndarray = np.full(self.dados.num_elementos(), self.x_inicial)
 
-    @property
-    def num_elementos(self) -> int:
-        """Retorna o número de elementos finitos do problema"""
-        return len(self.vetor_elementos)
+    def volume_estrutura_inicial(self) -> float:
+        """Retorna o volume da estrutura."""
+        return np.sum(self.x_inicial * self.dados.volumes_elementos_solidos)
 
-    @property
-    def num_nos(self) -> int:
-        """Retorna o número de nós que possui a malha"""
-        return self.nos.shape[0]
-
-    def volume_estrutura(self) -> float:
-        """Retorna o volume da estrutura"""
-        return np.sum(self.x_inicial * self.volumes_elementos_solidos)
-
-    def deslocamentos(self) -> np.ndarray:
+    def deslocamentos_nodais(self) -> np.ndarray:
         """Retorna os deslocamentos nodais em função das variáveis de projeto"""
         # Inserção das densidades relativas no problema
         return self.julia.eval(f'deslocamentos_simp(rho, p, dados)')
 
-    def ler_dados_entrada_arquivo(self):
+    def carregar_interface_julia(self):
         """Faz a leitura do arquivo de entrada de dados"""
-        # Leitura Python
-        self.matrizes_rigidez_elementos = ler_arquivo_entrada_dados_numpy(self.arquivo, 7)
-        self.vetor_forcas = ler_arquivo_entrada_dados_numpy(self.arquivo, 4)
-        self.vetor_apoios = ler_arquivo_entrada_dados_numpy(self.arquivo, 6)
-        self.graus_liberdade_elementos = ler_arquivo_entrada_dados_numpy(self.arquivo, 5)
-        self.volumes_elementos_solidos = ler_arquivo_entrada_dados_numpy(self.arquivo, 8)
-        self.limites_dominio = ler_arquivo_entrada_dados_numpy(self.arquivo, 3)
-        self.vetor_elementos = ler_arquivo_entrada_dados_numpy(self.arquivo, 0)
-        self.nos = ler_arquivo_entrada_dados_numpy(self.arquivo, 1)
-        self.graus_liberdade_estrutura = ler_arquivo_entrada_dados_numpy(self.arquivo, 9)
-
         # Interface Julia
-        self.julia.kelems = self.matrizes_rigidez_elementos
-        self.julia.gls_elementos = [i + 1 for i in self.graus_liberdade_elementos]
-        self.julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.graus_liberdade_estrutura]
-        self.julia.apoios = self.vetor_apoios + 1
-        self.julia.forcas = self.vetor_forcas
-        self.julia.rcm = ler_arquivo_entrada_dados_numpy(self.arquivo, 11) + 1
+        self.julia.kelems = self.dados.k_elems
+        self.julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
+        self.julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
+        self.julia.apoios = self.dados.apoios + 1
+        self.julia.forcas = self.dados.forcas
+        self.julia.rcm = self.dados.rcm + 1
 
         self.julia.eval(f'dados = Dict("kelems" => kelems, "gls_elementos" => gls_elementos, '
                         f'"gls_estrutura" => gls_estrutura, "apoios" => apoios, "forcas" => forcas, '
                         f'"RCM" => rcm)')
 
-        # Cálculo dos nós de influência nos elementos pelo esquema de projeção
+        # Cálculo dos nós de influência nos elementos pelo esquema de projeção. Esse cálculo só
+        # é executado quando o esquema de projeção é utilizado.
         if self.tecnica_otimizacao != 0:
-            with ZipFile(self.arquivo, 'a') as arq_zip:
-                if (arq := ARQUIVOS_DADOS_ZIP[13]) not in arq_zip.namelist():
-                    self.pesos_nos = self.calcular_funcoes_peso()
-                    np.savez(arq, *self.pesos_nos)
-                    arq_zip.write(arq)
-                    os.remove(arq)
-                    return
-
-            self.pesos_nos = ler_arquivo_entrada_dados_numpy(self.arquivo, 13)
+            self.dados.salvar_arquivo_numpy(self.calcular_funcoes_peso(), 13)
 
     def calcular_funcoes_peso(self):
         """Encontra os nós que se encontram dentro do raio de influência de cada elemento.
@@ -153,19 +110,20 @@ class OC:
                 # Função de projeção inversa
                 return r / rmin
 
+        num_elems = self.dados.num_elementos()
         # Vetorização da função
         vet_w = np.vectorize(w)
-
-        kd_nos = KDTree(self.nos)
+        nos = self.dados.nos
+        kd_nos = KDTree(nos)
         conjunto_pesos = []
 
         c = 5
-        for i, e in enumerate(self.vetor_elementos):
-            if c <= (perc := (int(100 * (i + 1) / self.num_elementos))):
+        for i, e in enumerate(self.dados.elementos):
+            if c <= (perc := (int(100 * (i + 1) / num_elems))):
                 c += 5
                 logger.debug(f'{perc}%')
             # Nós do elemento
-            nos_elem = self.nos[e]
+            nos_elem = nos[e]
             # Cálculo do centroide do elemento
             centroide = np.mean(nos_elem, axis=0)
             # Pontos que recebem a influência do elemento
@@ -181,7 +139,7 @@ class OC:
             # inteiros antes de serem utilizados.
 
             # Distância entre os nós influenciados e o centroide do elemento de referência
-            dists = np.linalg.norm(self.nos[nos_influenciados] - centroide, axis=1)
+            dists = np.linalg.norm(nos[nos_influenciados] - centroide, axis=1)
             # Aplicação da função de projeção para o cálculo dos pesos
             pesos = vet_w(dists, rmin_tmp)
 
@@ -191,12 +149,14 @@ class OC:
 
     def calcular_densidades_elementos(self, beta) -> np.ndarray:
         """Retorna a densidade relativa do elemento a partir de sua identificação"""
-        rho = np.zeros(self.num_elementos)
+        num_elems = self.dados.num_elementos()
+        rho = np.zeros(num_elems)
+        pesos_elems = self.dados.pesos_esquema_projecao
 
-        for i in range(self.num_elementos):
-            ids_nos = self.pesos_nos[i][:, 0].astype(int)
-            pesos = self.pesos_nos[i][:, 1]
-            mi = (self.x[ids_nos] @ pesos) / np.sum(pesos)
+        for i in range(num_elems):
+            ids_nos = pesos_elems[i][:, 0].astype(int)
+            pesos_i = pesos_elems[i][:, 1]
+            mi = (self.x[ids_nos] @ pesos_i) / np.sum(pesos_i)
             # Adição da não linearidade
             rho[i] = self.heaviside(mi, beta, OC.METODO_HEAVISIDE)
 
@@ -204,14 +164,15 @@ class OC:
 
     def flexibilidade_media(self, u: np.ndarray) -> float:
         """Retorna a flexibilidade média da estrutura em função das variáveis de projeto"""
-        return self.vetor_forcas @ u
+        return self.dados.forcas @ u
 
     def sensibilidades_sem_filtro(self, u: np.ndarray) -> np.ndarray:
         """Calcula as sensibilidades dos elementos"""
-        kelems = self.matrizes_rigidez_elementos
+        kelems = self.dados.k_elems
+        gl_elems = self.dados.graus_liberdade_elementos
+        sens = np.zeros(self.dados.num_elementos())
 
-        sens = np.zeros(self.num_elementos)
-        for i, gl in enumerate(self.graus_liberdade_elementos):
+        for i, gl in enumerate(gl_elems):
             sens[i] = (-self.p * self.rho[i] ** (self.p - 1)) * (u[gl] @ kelems[i] @ u[gl])
 
         return sens
@@ -267,44 +228,47 @@ class OC:
             sens_fo: Vetor contendo as sensibilidades da função objetivo.
             sens_vol: Vetor contendo as sensibilidades da restrição de volume.
         """
-        kelems = self.matrizes_rigidez_elementos
+        kelems = self.dados.k_elems
         # Sensibilidade da função objetivo
-        sens_fo = np.zeros(self.num_nos)
+        sens_fo = np.zeros(self.dados.num_nos())
         # Sensibilidade da restrição de volume
-        sens_vol = np.zeros(self.num_nos)
-        vols = self.volumes_elementos_solidos
+        sens_vol = np.zeros(self.dados.num_nos())
+        vols = self.dados.volumes_elementos_solidos
+        gl_elems = self.dados.graus_liberdade_elementos
+        pesos_elems = self.dados.pesos_esquema_projecao
 
-        for i, gl in enumerate(self.graus_liberdade_elementos):
+        for i, gl in enumerate(gl_elems):
             # Parcela da sensibilidade devida à densidade do elemento
             sens_el = (-self.p * self.rho[i] ** (self.p - 1)) * (u[gl] @ kelems[i] @ u[gl])
             # Desmembramento da matriz de pesos
-            ids_nos = self.pesos_nos[i][:, 0].astype(int)
-            pesos = self.pesos_nos[i][:, 1]
-            soma_pesos = np.sum(pesos)
+            ids_nos = pesos_elems[i][:, 0].astype(int)
+            pesos_i = pesos_elems[i][:, 1]
+            soma_pesos = np.sum(pesos_i)
             # Não linearidade
-            mi = (self.x[ids_nos] @ pesos) / soma_pesos
-            diff_rhoe_rhon = self.heaviside(mi, beta, OC.METODO_HEAVISIDE, True) * pesos / soma_pesos
+            mi = (self.x[ids_nos] @ pesos_i) / soma_pesos
+            diff_rhoe_rhon = self.heaviside(mi, beta, OC.METODO_HEAVISIDE, True) * pesos_i / soma_pesos
             sens_fo[ids_nos] += sens_el * diff_rhoe_rhon
             sens_vol[ids_nos] += vols[i] * diff_rhoe_rhon
 
         return sens_fo, sens_vol
 
-    def percent_di(self) -> float:
+    def percentual_densidades_intermediarias(self) -> float:
         """Retorna o percentual de densidades intermediárias da topologia"""
         return 100 * sum(4 * rho * (1 - rho) for rho in self.rho) / len(self.rho)
 
     def atualizar_x(self, u: np.ndarray, beta=0) -> Tuple[np.ndarray, np.ndarray]:
         """Atualiza as variáveis de projeto (densidades nodais)"""
-        vol_inicial = self.volume_estrutura()
+        vol_inicial = self.volume_estrutura_inicial()
         # Volume da estrutura em função das densidades correntes para os elementos
-        vol_atual = self.volumes_elementos_solidos @ self.rho
+        vols_elems_solidos = self.dados.volumes_elementos_solidos
+        vol_atual = vols_elems_solidos @ self.rho
         # Sensibilidades da função objetivo e da restrição de volume
         if self.tecnica_otimizacao != 0:
             sens_fo, sens_vol = self.sensibilidades_esquema_projecao(u, beta)
             x = self.x
         else:
             sens_fo = self.sensibilidades_sem_filtro(u)
-            sens_vol = self.volumes_elementos_solidos * self.x_inicial
+            sens_vol = vols_elems_solidos * self.x_inicial
             x = self.rho
 
         eta = 0.5
@@ -370,7 +334,7 @@ class OC:
         resultados_gerais = []
 
         # Último vetor de deslocamentos
-        u_ant = np.zeros(self.num_nos * 2)
+        u_ant = np.zeros(self.dados.num_nos() * 2)
         # Contador de iterações global
         it = 0
 
@@ -400,16 +364,16 @@ class OC:
                 # esquema de projeção. Essa otimização é feita com `tecnica_otimizacao = 0` apenas.
                 if self.tecnica_otimizacao != 0:
                     self.julia.rho = self.rho = self.calcular_densidades_elementos(beta)
-                    u = self.deslocamentos()
+                    u = self.deslocamentos_nodais()
                     self.x = self.atualizar_x(u, beta)
                 else:
                     self.julia.rho = self.rho
-                    u = self.deslocamentos()
+                    u = self.deslocamentos_nodais()
                     self.rho = self.atualizar_x(u)
 
                 # Cálculo dos erros.
                 # Erro entre as duas densidades intermediárias mais atuais.
-                di = self.percent_di()
+                di = self.percentual_densidades_intermediarias()
                 erro_di = 100 * abs((di - di_ant) / di_ant)
                 di_ant = di
 
@@ -421,7 +385,7 @@ class OC:
                 u_ant = u.copy()
 
                 # Log da iteração.
-                vols = self.volumes_elementos_solidos
+                vols = self.dados.volumes_elementos_solidos
                 # Função objetivo.
                 fo = self.flexibilidade_media(u)
                 # Percentual do volume atual em relação ao volume inicial de material.
@@ -468,14 +432,14 @@ class OC:
             otimizar_p_beta_fixos(p_i, 0)
 
         # Continuidade em beta.
-        if self.tecnica_otimizacao == 2:
+        if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
             # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
             # 1.5 * 1/3 = 0.5
             beta_i = 1 / 3
             for i in range(num_max_iteracoes):
-                dens_i = self.percent_di()
+                dens_i = self.percentual_densidades_intermediarias()
                 if beta_i < OC.BETA_MAX:
-                    if dens_i >= 5:
+                    if (dens_i >= 5) or (i < 10):
                         beta_i = min(1.5 * beta_i, OC.BETA_MAX)
                     elif 1 <= dens_i < 5:
                         beta_i = min(beta_i + 5, OC.BETA_MAX)
@@ -486,5 +450,5 @@ class OC:
                     break
 
         # Salvar resultados no arquivo `.zip`.
-        salvar_arquivo_numpy(self.arquivo, np.array(resultados_rho), 14)
-        salvar_arquivo_numpy(self.arquivo, np.array(resultados_gerais), 15)
+        self.dados.salvar_arquivo_numpy(np.array(resultados_rho), 14)
+        self.dados.salvar_arquivo_numpy(np.array(resultados_gerais), 15)
