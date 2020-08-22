@@ -9,7 +9,6 @@ from matplotlib.collections import PathCollection
 from matplotlib.path import Path
 from matplotlib import patches
 import os
-from otm.manipulacao_arquivos import *
 from scipy.sparse.csgraph import reverse_cuthill_mckee
 from otm.dados import Dados
 from julia import Main
@@ -75,7 +74,7 @@ class Estrutura:
             arq_txt.write(f'poisson = {self.concreto.nu}\n')
             arq_txt.write(f'espessura = {self.espessura}\n')
 
-        self.dados.salvar_arquivo_generico_em_zip(n)
+        self.dados.salvar_arquivo_generico_em_zip(ARQUIVOS_DADOS_ZIP[n])
 
     def criar_elementos_poligonais(self):
         logger.debug('Criando os elementos finitos poligonais')
@@ -250,17 +249,16 @@ class Estrutura:
         """Retorna a posição dos nós deslocados levando-se em conta um fator multiplicador."""
         return nos + multiplicador_deslocs * Estrutura.deslocamentos_por_no(u)
 
-    @staticmethod
-    def plotar_estrutura_deformada(arquivo, multiplicador_deslocs=1):
+    def plotar_estrutura_deformada(self, arquivo, multiplicador_deslocs=1):
         """Exibe a malha final gerada"""
         logger.debug('Plotando a estrutura deformada')
 
         # Leitura dos dados importantes
-        nos = ler_arquivo_entrada_dados_numpy(arquivo, 1)
-        poli = ler_arquivo_wkb_shapely(arquivo, 10)
-        vetor_elementos = ler_arquivo_entrada_dados_numpy(arquivo, 0)
-        vetor_forcas = ler_arquivo_entrada_dados_numpy(arquivo, 4)
-        vetor_apoios = ler_arquivo_entrada_dados_numpy(arquivo, 6)
+        nos = self.dados.nos
+        poli = self.dados.poligono_dominio_estendido
+        vetor_elementos = self.dados.elementos
+        vetor_forcas = self.dados.forcas
+        vetor_apoios = self.dados.apoios
 
         # Deslocamentos
         u = Estrutura.deslocamentos_arquivo(arquivo)

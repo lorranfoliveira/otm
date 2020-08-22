@@ -208,8 +208,8 @@ class Dados:
                 arq_zip.write(arq_np.name)
                 os.remove(arq_np_str)
 
-    def salvar_arquivo_generico_em_zip(self, n: int):
-        arquivo_generico = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[n])
+    def salvar_arquivo_generico_em_zip(self, nome_arquivo: str):
+        arquivo_generico = self.arquivo.parent.joinpath(nome_arquivo)
         with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
             if arquivo_generico.name not in arq_zip.namelist():
                 logger.info(f'Salvando "{arquivo_generico.name}" em "{self.arquivo.name}..."')

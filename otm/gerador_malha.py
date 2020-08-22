@@ -6,6 +6,7 @@ from shapely.affinity import scale, translate
 from shapely.wkb import dumps
 from typing import List, Dict, Optional, Tuple, Union
 import numpy as np
+from otm.dados import Dados
 import os
 import pathlib
 from otm.constantes import ARQUIVOS_DADOS_ZIP
@@ -15,21 +16,9 @@ from scipy.spatial import KDTree
 from loguru import logger
 from random import uniform
 import matplotlib.pyplot as plt
-from matplotlib.path import Path
-from matplotlib import patches
-from matplotlib.collections import PathCollection, PatchCollection
 import zipfile
-from otm.manipulacao_arquivos import *
 
 __all__ = ['GeradorMalha']
-
-
-def _numpy_para_multipoint(pontos: np.ndarray) -> MultiPoint:
-    """Converte um vetor de coordenadas de pontos, com dimensões nx2, em um objeto MultiPoint."""
-    multi: Optional[Point] = pontos.shape[0] * [None]
-    for i in range(pontos.shape[0]):
-        multi[i] = Point(pontos[i][0], pontos[i][1])
-    return MultiPoint(multi)
 
 
 def _multipoint_para_numpy(pontos: MultiPoint) -> np.ndarray:
@@ -51,7 +40,7 @@ class GeradorMalha:
     rastreador_nos_txt = 'rastreador_nos'
     tipo_layer = [carga_txt, furo_txt, apoios_txt, geometria_txt, rastreador_nos_txt]
 
-    def __init__(self, arquivo_dxf: Union[str, pathlib.Path], num_elems: int, tipo_malha='poligonal'):
+    def __init__(self, dados: Dados, num_elems: int, tipo_malha='poligonal'):
         """Construtor.
 
         Args:
@@ -59,11 +48,12 @@ class GeradorMalha:
             num_elems: Número de elementos finitos que serão gerados.
             tipo_malha: Tipo de distribuição das sementes dos diagramas de Voronoi. Pode ser 'poligonal' ou 'retangular'.
         """
-        self.arquivo_dxf = arquivo_dxf
+        self.dados = dados
         self.num_elems = num_elems
         self.tipo_malha = tipo_malha
         # Agrupamento das linhas do dxf por layer
-        self.layers: dict = groupby(entities=ezdxf.readfile(self.arquivo_dxf).modelspace(), dxfattrib='layer')
+        arquivo_dxf = self.dados.arquivo.with_suffix('.dxf').name
+        self.layers: dict = groupby(entities=ezdxf.readfile(arquivo_dxf).modelspace(), dxfattrib='layer')
 
     def _dicionario_linhas_dxf(self) -> Dict[str, np.ndarray]:
         """Lê o arquivo dxf e retorna os pontos que formam as linhas contidas no layer.
@@ -105,7 +95,7 @@ class GeradorMalha:
 
         multipontos = MultiPoint(vertices)
 
-        nome_arq_txt = f'{self.arquivo_dxf.replace(".dxf", "")}_nos_rastreados.txt'
+        nome_arq_txt = ARQUIVOS_DADOS_ZIP[16]
 
         if any(i.startswith(GeradorMalha.rastreador_nos_txt) for i in lin_layers):
             with open(nome_arq_txt, 'w') as arq:
@@ -137,8 +127,7 @@ class GeradorMalha:
                         arq.write(f'{rast} = {sorted(ids)}\n')
 
             # Salvar no arquivo zip
-            with zipfile.ZipFile(f'{self.arquivo_dxf.replace(".dxf", "")}.zip', 'a',
-                                 compression=zipfile.ZIP_DEFLATED) as arq_zip:
+            with zipfile.ZipFile(self.dados.arquivo.name, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
                 arq_zip.write(pathlib.Path(nome_arq_txt).name)
 
             # Apagar o arquivo txt
@@ -643,43 +632,22 @@ class GeradorMalha:
     def salvar_malha(self, vertices, elementos):
         """Salva os dados da malha em um arquivo zip"""
 
-        logger.debug(f'Criando o arquivo de entrada de dados \"{self.arquivo_dxf.replace(".dxf", ".zip")}\"')
+        logger.debug(f'Criando o arquivo de entrada de dados "{self.dados.arquivo.name}"')
 
         # Salvar arquivos numpy
         # Salvar elementos
         arq_elementos = []
         for el in elementos:
             arq_elementos.append(np.array(el))
-        np.savez(ARQUIVOS_DADOS_ZIP[0], *arq_elementos)
-
+        self.dados.salvar_arquivo_numpy(arq_elementos, 0)
         # Salvar nós
-        np.save(ARQUIVOS_DADOS_ZIP[1], vertices)
-
-        # Salvar diâmetro médio dos elementos
-        np.save(ARQUIVOS_DADOS_ZIP[2],
-                np.array(self.diametro_medio_elementos(self.poligono_estrutura())))
-
+        self.dados.salvar_arquivo_numpy(vertices, 1)
         # Salvar polígono do domínio estendido
         with open(ARQUIVOS_DADOS_ZIP[10], 'wb') as arq_wkb:
             arq_wkb.write(dumps(self.poligono_estrutura()))
-
-        # Salvar limites do domínio
-        xmin, ymin, xmax, ymax = self.poligono_estrutura().bounds
-        esc = 0.1 * max(xmax - xmin, ymax - ymin)
-        np.save(ARQUIVOS_DADOS_ZIP[3], np.array([xmin - esc, ymin - esc, xmax + esc, ymax + esc]))
-
-        # Salvar arquivo zip e apagar os arquivos salvos
-        with zipfile.ZipFile(f'{self.arquivo_dxf.replace(".dxf", "")}.zip', 'w',
-                             compression=zipfile.ZIP_DEFLATED) as arq_zip:
-            # Salvar arquivo dxf
-            arq_zip.write(pathlib.Path(self.arquivo_dxf).name)
-
-            # Salvar dados da malha
-            for i in [0, 1, 2, 3, 10]:
-                arq_zip.write(ARQUIVOS_DADOS_ZIP[i])
-                os.remove(ARQUIVOS_DADOS_ZIP[i])
-
-        logger.debug('Arquivo salvo!')
+        self.dados.salvar_arquivo_generico_em_zip(ARQUIVOS_DADOS_ZIP[10])
+        # Salvar arquivo `.dxf`.
+        self.dados.salvar_arquivo_generico_em_zip(self.dados.arquivo.with_suffix('.dxf').name)
 
     def criar_malha(self, esp_faixa_espelhamento: float, num_iteracoes: int,
                     tol_colapso_pontos: float = 0.2) -> tuple:
@@ -697,7 +665,7 @@ class GeradorMalha:
         Returns: Regiões dos elementos e os vértices utilizados em sua formas e valores finais.
 
         """
-        logger.info(f'Iniciando a criação da malha de elementos finitos do domínio "{self.arquivo_dxf}"')
+        logger.info(f'Iniciando a criação da malha de elementos finitos do domínio "{self.dados.arquivo.stem}"')
 
         poligono = self.poligono_estrutura()
         diam_medio_elems = self.diametro_medio_elementos(poligono)
