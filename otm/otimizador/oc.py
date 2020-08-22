@@ -337,6 +337,11 @@ class OC:
         u_ant = np.zeros(self.dados.num_nos() * 2)
         # Contador de iterações global
         it = 0
+        # Erros iniciais em porcentagem.
+        erro_u = 100
+        erro_di = 100
+        # Percentual de densidadaes intermediárias inicial.
+        di_ant = 100
 
         def otimizar_p_beta_fixos(p, beta):
             """Otimiza as variáveis de projeto para um valor fixo de `p` e `beta`. Este processo é
@@ -348,12 +353,8 @@ class OC:
             """
             logger.info(f'{10 * "-"} {p=}\t {beta=} {10 * "-"}\n')
 
-            nonlocal u_ant, it
+            nonlocal u_ant, it, erro_u,erro_di, di_ant
 
-            # Erro inicial dado em porcentagem.
-            erro_u = 100
-            # Percentual de densidadaes intermediárias inicial.
-            di_ant = 100
             # Interface com Julia
             self.julia.p = self.p = p
 
