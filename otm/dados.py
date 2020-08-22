@@ -265,6 +265,14 @@ class Dados:
 
     # endregion
 
+    # region Dados análise
+    def num_graus_liberdade(self) -> int:
+        """Retorna o número total de graus de liberdade livres e impedidos que a estrutura possui.
+        São considerados 2 graus de liberdade por nó."""
+        return 2 * self.num_nos()
+
+    # endregin
+
     # Resultados
     def rhos_iteracao_final(self) -> np.ndarray:
         """Retorna um vetor com as densidades relativas dos elementos ao fim da última iteração."""

@@ -1,7 +1,7 @@
 from otm.mef.elementos_finitos.elemento_poligonal import ElementoPoligonal
 from loguru import logger
 from typing import List
-from scipy.sparse import coo_matrix, csr_matrix
+from scipy.sparse import csr_matrix
 import numpy as np
 from otm.constantes import ARQUIVOS_DADOS_ZIP
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ from matplotlib import patches
 import os
 from otm.manipulacao_arquivos import *
 from scipy.sparse.csgraph import reverse_cuthill_mckee
-from typing import Union
+from otm.dados import Dados
 from julia import Main
 import zipfile
 import pathlib
@@ -23,20 +23,16 @@ __all__ = ['Estrutura']
 class Estrutura:
     """Implementa as propriedades de uma estrutura"""
 
-    def __init__(self, arquivo: pathlib.Path, concreto: MaterialIsotropico, dict_cargas: dict, dict_apoios: dict,
+    def __init__(self, dados: Dados, concreto: MaterialIsotropico, dict_cargas: dict, dict_apoios: dict,
                  espessura: float = 1):
         # dict_cargas_apoios
-        self.arquivo = arquivo
+        self.dados = dados
         self.concreto = concreto
         self.espessura = espessura
         self.dict_forcas = dict_cargas
         self.dict_apoios = dict_apoios
 
-        self.nos: np.ndarray = np.array([])
-        self.vetor_elementos: List[np.ndarray] = []
-        self.elementos: List[ElementoPoligonal] = []
-        self.vetor_apoios: np.ndarray = np.array([])
-        self.kelems = None
+        self.elementos_poligonais: List[ElementoPoligonal] = []
 
         # Interface Julia
         julia = Main
@@ -44,97 +40,53 @@ class Estrutura:
 
     def carregar_e_salvar_dados(self):
         # A ordem das funções abaixo deve ser mantida
-        self.ler_arquivo_entrada_dados()
         self.criar_elementos_poligonais()
         self.salvar_dados_estrutura()
 
-        logger.debug(f'Elementos: {len(self.elementos)}, Nós: {len(self.nos)}, GL: {2 * len(self.nos)}')
-
-    def salvar_vetor_forcas(self):
-        """Salva o vetor de forças da estrutura no arquivo .zip"""
-        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[4])
-
-        with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
-            if arq.name not in arq_zip.namelist():
-
-                logger.debug('Salvando o vetor de forças')
-
-                np.save(str(arq), self.converter_dict_forcas_para_vetor_forcas())
-                arq_zip.write(arq.name)
-                os.remove(str(arq))
-            else:
-                logger.warning(f'O arquivo "{arq.name}" já existe em "{self.arquivo.name}" e não '
-                               f'pode ser sobrescrito! Ele deve ser removido para ser substituído.')
-
-    def salvar_vetor_apoios(self):
-        """Salva o vetor de apoios da estrutura no arquivo .zip"""
-        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[6])
-
-        with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
-            if arq.name not in arq_zip.namelist():
-
-                logger.debug('Salvando o vetor de apoios')
-
-                np.save(str(arq), self.converter_dict_apoios_para_vetor_apoios())
-                arq_zip.write(arq.name)
-                os.remove(str(arq))
-            else:
-                logger.warning(f'O arquivo "{arq.name}" já existe em "{self.arquivo.name}" e não '
-                               f'pode ser sobrescrito! Ele deve ser removido para ser substituído.')
-
-    def ler_arquivo_entrada_dados(self):
-        """Faz a leitura do arquivo de entrada de dados"""
-        self.nos = ler_arquivo_entrada_dados_numpy(self.arquivo, 1)
-        self.vetor_elementos = ler_arquivo_entrada_dados_numpy(self.arquivo, 0)
+        logger.debug(f'Elementos: {len(self.elementos_poligonais)}, Nós: {len(self.dados.nos)}, '
+                     f'GL: {2 * len(self.dados.nos)}')
 
     def salvar_dados_estrutura(self):
         """Salva os dados da estrutura"""
         # Não alterar a ordem das funções abaixo
-        self.salvar_vetor_forcas()
-        self.salvar_vetor_apoios()
-
-        self.vetor_apoios = ler_arquivo_entrada_dados_numpy(self.arquivo, 6)
-
-        self.salvar_graus_liberdade_elementos()
-        self.salvar_graus_liberdade_estrutura()
-        self.salvar_matrizes_de_rigidez_elementos()
-        self.salvar_volumes_elementos()
+        # Vetor de forças.
+        self.dados.salvar_arquivo_numpy(self.converter_dict_forcas_para_vetor_forcas(), 4)
+        # Vetor de apoios.
+        self.dados.salvar_arquivo_numpy(self.converter_dict_apoios_para_vetor_apoios(), 6)
+        # Graus de liberdade por elemento.
+        self.dados.salvar_arquivo_numpy(self.graus_liberdade_elementos(), 5)
+        # Graus de liberdade da estrutura.
+        self.dados.salvar_arquivo_numpy(self.graus_liberdade_estrutura(), 9)
+        # Matrizes de rigidez dos elementos.
+        self.dados.salvar_arquivo_numpy(self.matrizes_rigidez_elementos(), 7)
+        # Volumes dos elementos sólidos.
+        self.dados.salvar_arquivo_numpy(self.volumes_elementos(), 8)
+        # Permutação RCM.
+        self.salvar_permutacao_rcm()
         self.salvar_dados_entrada_txt()
 
     def salvar_dados_entrada_txt(self):
-        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[12])
+        n = 12
+        arq = self.dados.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[n])
+        with open(str(arq), 'w') as arq_txt:
+            arq_txt.write(f'forcas = {self.dict_forcas}\n')
+            arq_txt.write(f'apoios = {self.dict_apoios}\n')
+            arq_txt.write(f'E = {self.concreto.ec}\n')
+            arq_txt.write(f'poisson = {self.concreto.nu}\n')
+            arq_txt.write(f'espessura = {self.espessura}\n')
 
-        with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
-            if arq.name not in arq_zip.namelist():
-
-                logger.debug('Salvando o arquivo de dados em texto')
-
-                with open(str(arq), 'w') as arq_txt:
-                    arq_txt.write(f'forcas = {self.dict_forcas}\n')
-                    arq_txt.write(f'apoios = {self.dict_apoios}\n')
-                    arq_txt.write(f'E = {self.concreto.ec}\n')
-                    arq_txt.write(f'poisson = {self.concreto.nu}\n')
-                    arq_txt.write(f'espessura = {self.espessura}\n')
-
-                arq_zip.write(arq.name)
-                os.remove(str(arq))
-            else:
-                logger.warning(f'O arquivo "{arq.name}" já existe em "{self.arquivo.name}" e não '
-                               f'pode ser sobrescrito! Ele deve ser removido para ser substituído.')
+        self.dados.salvar_arquivo_generico_em_zip(n)
 
     def criar_elementos_poligonais(self):
         logger.debug('Criando os elementos finitos poligonais')
 
-        self.elementos = []
-        for i, e in enumerate(self.vetor_elementos):
-            # Verificar se o elemento é poligonal
+        self.elementos_poligonais = []
+        nos = self.dados.nos
+        for i, e in enumerate(self.dados.elementos):
+            # Verificar se o elemento é poligonal ou de barra.
             if len(e) > 2:
-                el = ElementoPoligonal(self.nos[e], self.concreto, self.espessura, e)
-                self.elementos.append(el)
-
-    def num_nos(self) -> int:
-        """Retorna o número de nós da estrutura"""
-        return self.nos.shape[0]
+                el = ElementoPoligonal(nos[e], self.concreto, self.espessura, e)
+                self.elementos_poligonais.append(el)
 
     def graus_liberdade_estrutura(self) -> np.array:
         """Vetor que contém os parâmetros de conversão dos graus de liberdade da forma B para a forma A.
@@ -142,39 +94,20 @@ class Estrutura:
         de liberdade correspondente na forma A.
         """
         # Todos os graus de liberdade impedidos deverão assumir valor -1
-        gls = np.full(self.num_nos() * 2, -1)
+        gls = np.full(self.dados.num_nos() * 2, -1)
+        apoios = self.dados.apoios
 
-        for e in self.elementos:
+        for e in self.elementos_poligonais:
             e_glb = e.graus_liberdade()
             e_gla = e_glb.copy()
             for i in range(e_glb.size):
-                if (b := e_glb[i]) not in self.vetor_apoios:
-                    e_gla[i] -= len(list(filter(lambda x: x < b, self.vetor_apoios)))
+                if (b := e_glb[i]) not in apoios:
+                    e_gla[i] -= len(list(filter(lambda x: x < b, apoios)))
                 else:
                     e_gla[i] = -1
             gls[e_glb] = e_gla.copy()
 
         return gls
-
-    def salvar_graus_liberdade_estrutura(self):
-
-        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[9])
-
-        with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
-            if arq.name not in arq_zip.namelist():
-                logger.debug('Salvando os graus de liberdade da estrutura')
-
-                glest = self.graus_liberdade_estrutura()
-                np.save(str(arq), glest)
-                arq_zip.write(arq.name)
-                os.remove(str(arq))
-            else:
-                logger.warning(f'O arquivo "{arq.name}" já existe em "{self.arquivo.name}" e não '
-                               f'pode ser sobrescrito! Ele deve ser removido para ser substituído.')
-
-    def num_graus_liberdade(self) -> int:
-        """Retorna o número de graus de liberdade da estrutura."""
-        return len(self.nos) * 2
 
     def salvar_permutacao_rcm(self):
         """Salva a permutação feita pelo Reverse Cuthill Mckee"""
@@ -182,119 +115,53 @@ class Estrutura:
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
 
-        julia.kelems = ler_arquivo_entrada_dados_numpy(self.arquivo, 7)
-        julia.gls_elementos = [i + 1 for i in self.graus_liberdade_elementos()]
-        julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.graus_liberdade_estrutura()]
-        julia.apoios = self.vetor_apoios + 1
+        julia.kelems = self.dados.k_elems
+        julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
+        julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
+        julia.apoios = self.dados.apoios + 1
 
         julia.eval('dados = Dict("kelems" => kelems, "gls_elementos" => gls_elementos, '
                    '"gls_estrutura" => gls_estrutura, "apoios" => apoios)')
 
         linhas, colunas, termos = julia.eval('matriz_rigidez_estrutura(dados["kelems"], dados, true)')
 
-        ngl = len(julia.gls_estrutura) - len(self.vetor_apoios)
+        # Número de graus de liberdade livres.
+        ngl = self.dados.num_graus_liberdade() - len(self.dados.apoios)
+
         k = csr_matrix((termos, (linhas - 1, colunas - 1)), shape=(ngl, ngl))
-
         rcm = reverse_cuthill_mckee(k)
-        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[11])
 
-        with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
-            if arq.name not in arq_zip.namelist():
-
-                logger.debug('Salvando a permutação RCM')
-
-                np.save(str(arq), rcm)
-                arq_zip.write(arq.name)
-                os.remove(str(arq))
-            else:
-                logger.warning(f'O arquivo "{arq.name}" já existe em "{self.arquivo.name}" e não '
-                               f'pode ser sobrescrito! Ele deve ser removido para ser substituído.')
+        # Salvar o vetor rcm.
+        self.dados.salvar_arquivo_numpy(rcm, 11)
 
     def graus_liberdade_elementos(self):
         gles = []
-        for e in self.elementos:
+        for e in self.elementos_poligonais:
             gles.append(e.graus_liberdade())
 
         return gles
 
-    def salvar_graus_liberdade_elementos(self):
-        """Salva os graus de liberdade dos elementos no arquivo .zip"""
-        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[5])
-
-        with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
-            if arq.name not in arq_zip.namelist():
-
-                logger.debug('Salvando os graus de liberdade dos elementos')
-
-                gles = self.graus_liberdade_elementos()
-
-                np.savez(str(arq), *gles)
-                arq_zip.write(arq.name)
-                os.remove(str(arq))
-            else:
-                logger.warning(f'O arquivo "{arq.name}" já existe em "{self.arquivo.name}" e não '
-                               f'pode ser sobrescrito! Ele deve ser removido para ser substituído.')
-
-    def _volumes_elementos(self) -> np.ndarray:
+    def volumes_elementos(self) -> np.ndarray:
         """Retorna os volumes dos elementos finitos"""
-        volumes = np.zeros(len(self.elementos))
-        for i in range(len(self.elementos)):
-            volumes[i] = self.espessura * self.elementos[i].poligono().area
+        volumes = np.zeros(len(self.elementos_poligonais))
+        for i in range(len(self.elementos_poligonais)):
+            volumes[i] = self.espessura * self.elementos_poligonais[i].poligono().area
 
         return volumes
-
-    def salvar_volumes_elementos(self):
-        """Salva os graus de liberdade dos elementos no arquivo .zip"""
-        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[8])
-
-        with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
-            if arq.name not in arq_zip.namelist():
-
-                logger.debug('Salvando os volumes dos elementos')
-
-                volumes = self._volumes_elementos()
-                np.save(str(arq), volumes)
-                arq_zip.write(arq.name)
-                os.remove(str(arq))
-            else:
-                logger.warning(f'O arquivo "{arq.name}" já existe em "{self.arquivo.name}" e não '
-                               f'pode ser sobrescrito! Ele deve ser removido para ser substituído.')
 
     def matrizes_rigidez_elementos(self) -> List[np.ndarray]:
         """Retorna as matrizes de rigidez dos elementos"""
         logger.debug('Calculando as matrizes de rigidez dos elementos')
 
-        nel = len(self.elementos)
+        nel = len(self.elementos_poligonais)
         kels = []
         c = 5
-        for i, e in enumerate(self.elementos):
+        for i, e in enumerate(self.elementos_poligonais):
             if c <= (perc := (int(100 * (i + 1) / nel))):
                 c += 5
                 logger.debug(f'{perc}%')
             kels.append(e.matriz_rigidez())
         return kels
-
-    def salvar_matrizes_de_rigidez_elementos(self):
-        """Adiciona as matrizes de rigidez dos elementos no arquivo zip"""
-        arq = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[7])
-
-        with zipfile.ZipFile(self.arquivo, 'a', zipfile.ZIP_DEFLATED) as arq_zip:
-            if arq.name not in arq_zip.namelist():
-
-                logger.debug('Salvando as matrizes de rigidez dos elementos')
-
-                ks_el = self.matrizes_rigidez_elementos()
-
-                # Salvar as matrizes de rigidez
-                np.savez(str(arq), *ks_el)
-                arq_zip.write(arq.name)
-                os.remove(str(arq))
-            else:
-                logger.warning(f'O arquivo "{arq.name}" já existe em "{self.arquivo.name}" e não '
-                               f'pode ser sobrescrito! Ele deve ser removido para ser substituído.')
-
-        # Salvar o padrão RCM
-        self.salvar_permutacao_rcm()
 
     def converter_dict_apoios_para_vetor_apoios(self) -> np.ndarray:
         vet_apoios = []
@@ -308,7 +175,7 @@ class Estrutura:
         return np.array(vet_apoios, dtype=int)
 
     def converter_dict_forcas_para_vetor_forcas(self) -> np.ndarray:
-        cargas = np.zeros(self.num_graus_liberdade())
+        cargas = np.zeros(self.dados.num_graus_liberdade())
         for no in self.dict_forcas:
             gls = ElementoPoligonal.id_no_para_grau_liberdade(no)
             cargas[gls] = self.dict_forcas[no]
