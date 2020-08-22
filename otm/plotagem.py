@@ -21,6 +21,14 @@ class Plot:
 
         Args:
             id_y: Identificação da coluna do dado (resultados gerais) a ser representado na abcissa do gráfico.
+                # 0 -> Id da iteração para valores constantes de `p` e `beta`, ou `c` (do código abaixo).
+                # 1 -> `p`.
+                # 2 -> `beta`.
+                # 3 -> Valor da função objetivo.
+                # 4 -> Percentual de volume da estrutura após a otimização em relação ao volume inicial.
+                # 5 -> Percentual de densidades intermediárias.
+                # 6 -> Erro relacionado aos deslocamentos.
+                # 7 -> Erro relacionado ao percentual de densidades intermediárias.
             titulo: Título do gráfico.
         """
         y = self.dados.resultados_gerais[:, id_y]
