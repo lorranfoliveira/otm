@@ -32,12 +32,19 @@ class OC:
     TECNICA_OTM_EP_LINEAR = [1, 3]
     TECNICA_OTM_EP_HEAVISIDE = [2, 4]
 
-    def __init__(self, dados: Dados, x_inicial: float = 0.5, p: float = 3, rho_min: float = 1e-3,
+    def __init__(self, dados: Dados, rho_inicial: float = 0.5, p: float = 3, rho_min: float = 1e-3,
                  rmin: float = 0, tecnica_otimizacao: int = 0):
-        """Se rmin == 0, a otimização será feita sem a aplicação do esquema de projeção
+        """Se rmin == 0, a otimização será feita sem a aplicação do esquema de projeção.
 
         Args:
-            tecnica_otimizacao:
+            dados: Objeto que acesso ao arquivo `.zip` para a leitura e a escrita dos dados do problema.
+            rho_inicial: Densidade intermediária inicial atribuída a todos os elementos.
+            p: Coeficiente de penalização do modelo SIMP. O método da continuação ocorre para valores positivos
+                de `p` em um passo a ser especificado no método `otimizar`.
+            rho_min: Valor mínimo de densidade intermediária que um elemento pode assumir para que se
+                evite singularidades na matriz de rigidez.
+            rmin: Raio mínimo da aplicação do esquema de projeção.
+            tecnica_otimizacao: Técnica de otimização a ser utilizada no processo.
                 0 -> Sem filtro.
                 1 -> Com esquema de projeção linear direto.
                 2 -> Com esquema de projeção Heaviside direto.
@@ -45,36 +52,37 @@ class OC:
                 4 -> Com esquema de projeção Heaviside inverso.
 
         """
-        self.x_inicial: float = x_inicial
+        self.rho_inicial: float = rho_inicial
         self.dados = dados
         self.p = p
         self.rho_min = rho_min
         self.rmin = rmin
         self.tecnica_otimizacao = tecnica_otimizacao
 
-        # Interface Julia
+        # Interface Julia.
         self.julia = Main
         self.julia.eval('include("julia_core/Deslocamentos.jl")')
 
         self.carregar_interface_julia()
 
-        # Densidades dos nós
-        self.x: np.ndarray = np.full(self.dados.num_nos(), self.x_inicial)
+        # Densidades dos nós.
+        self.x: np.ndarray = np.full(self.dados.num_nos(), self.rho_inicial)
         # Densidades dos elementos
-        self.rho: np.ndarray = np.full(self.dados.num_elementos(), self.x_inicial)
+        self.rho: np.ndarray = np.full(self.dados.num_elementos(), self.rho_inicial)
 
     def volume_estrutura_inicial(self) -> float:
-        """Retorna o volume da estrutura."""
-        return np.sum(self.x_inicial * self.dados.volumes_elementos_solidos)
+        """Retorna o volume inicial da estrutura (volume de material que será distribuído)."""
+        return np.sum(self.rho_inicial * self.dados.volumes_elementos_solidos)
 
     def deslocamentos_nodais(self) -> np.ndarray:
-        """Retorna os deslocamentos nodais em função das variáveis de projeto"""
-        # Inserção das densidades relativas no problema
+        """Retorna os deslocamentos nodais em função das variáveis de projeto."""
         return self.julia.eval(f'deslocamentos_simp(rho, p, dados)')
 
     def carregar_interface_julia(self):
-        """Faz a leitura do arquivo de entrada de dados"""
-        # Interface Julia
+        """Faz o carregamento dos dados necessários para a utilização da interface com a linguagem Julia."""
+        # Os índices dos termos de um vetor em Python se iniciam em 0, mas em Julia esse início se dá em 1.
+        # Abaixo são feitas as adaptações necessárias para a correta transferência de dados entre as duas
+        # linguagens.
         self.julia.kelems = self.dados.k_elems
         self.julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
         self.julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
@@ -92,10 +100,12 @@ class OC:
             self.dados.salvar_arquivo_numpy(self.calcular_funcoes_peso(), 13)
 
     def calcular_funcoes_peso(self):
-        """Encontra os nós que se encontram dentro do raio de influência de cada elemento.
-        Retorna um vetor onde cada índice corresponde a um elemento e é composto por uma matriz n x 2, onde n
-        é o número de nós dentro da área de influência do elemento. A primeiro coluna do índice corresponde ao
-        número do nó e a segunda à distância entre o centroide do elemento e o nó em questão.
+        """Encontra os nós inscritos dentro do raio de influência de cada elemento e calcula seus pesos
+        para a composição do processo que aplica o esquema de projeção.
+        Retorna um vetor onde cada índice corresponde a um elemento. O termo que representa os nós que influenciam
+        em um elemento é composto por uma matriz n x 2, onde n é o número de nós dentro da área de influência do
+        elemento. A primeiro coluna do índice corresponde à identificação do nó e a segunda à distância entre o
+        centroide do elemento e o nó em questão.
 
         Se o número de nós capturados for menor que o número de nós que compõem o elemento, utiliza-se apenas
         os nós do elemento.
@@ -103,15 +113,16 @@ class OC:
         logger.debug(f'Calculando a influência dos nós sobre os elementos...')
 
         def w(r, rmin) -> float:
+            """Função interna que calcula as funções de projeção linear direta e inversa."""
             if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_DIRETO:
-                # Função de projeção direta
+                # Função de projeção direta.
                 return (rmin - r) / rmin
             elif self.tecnica_otimizacao in OC.TECNICA_OTM_EP_INVERSO:
-                # Função de projeção inversa
+                # Função de projeção inversa.
                 return r / rmin
 
         num_elems = self.dados.num_elementos()
-        # Vetorização da função
+        # Vetorização da função (para ganho de velocidade de processamento).
         vet_w = np.vectorize(w)
         nos = self.dados.nos
         kd_nos = KDTree(nos)
@@ -122,13 +133,13 @@ class OC:
             if c <= (perc := (int(100 * (i + 1) / num_elems))):
                 c += 5
                 logger.debug(f'{perc}%')
-            # Nós do elemento
+            # Nós do elemento.
             nos_elem = nos[e]
-            # Cálculo do centroide do elemento
+            # Cálculo do centroide do elemento.
             centroide = np.mean(nos_elem, axis=0)
-            # Pontos que recebem a influência do elemento
+            # Pontos que recebem a influência do elemento.
             nos_influenciados = kd_nos.query_ball_point(centroide, self.rmin)
-            # Um elemento receberá no mínimo a influência dos nós que o formam
+            # Um elemento receberá no mínimo a influência dos nós que o formam.
             rmin_tmp = self.rmin
             if len(nos_influenciados) < e.shape[0]:
                 rmin_tmp = np.max(np.linalg.norm(nos_elem - centroide, axis=1))
@@ -138,9 +149,9 @@ class OC:
             # coluna e os pesos na segunda coluna. Os valores da primeira coluna DEVEM ser convertidos para
             # inteiros antes de serem utilizados.
 
-            # Distância entre os nós influenciados e o centroide do elemento de referência
+            # Distância entre os nós influenciados e o centroide do elemento de referência.
             dists = np.linalg.norm(nos[nos_influenciados] - centroide, axis=1)
-            # Aplicação da função de projeção para o cálculo dos pesos
+            # Aplicação da função de projeção para o cálculo dos pesos.
             pesos = vet_w(dists, rmin_tmp)
 
             conjunto_pesos.append(np.array([nos_influenciados, pesos]).T)
@@ -148,7 +159,12 @@ class OC:
         return conjunto_pesos
 
     def calcular_densidades_elementos(self, beta) -> np.ndarray:
-        """Retorna a densidade relativa do elemento a partir de sua identificação"""
+        """Retorna a densidade relativa do elemento a partir de sua identificação.
+
+        Args:
+            beta: Coeficiente de regularização da função Heaviside. Quando `beta = 0`, a função de projeção
+                fica linear.
+        """
         num_elems = self.dados.num_elementos()
         rho = np.zeros(num_elems)
         pesos_elems = self.dados.pesos_esquema_projecao
@@ -157,17 +173,19 @@ class OC:
             ids_nos = pesos_elems[i][:, 0].astype(int)
             pesos_i = pesos_elems[i][:, 1]
             mi = (self.x[ids_nos] @ pesos_i) / np.sum(pesos_i)
-            # Adição da não linearidade
+            # Adição da não linearidade.
             rho[i] = self.heaviside(mi, beta, OC.METODO_HEAVISIDE)
 
         return rho
 
     def flexibilidade_media(self, u: np.ndarray) -> float:
-        """Retorna a flexibilidade média da estrutura em função das variáveis de projeto"""
+        """Retorna a flexibilidade média da estrutura em função das variáveis de projeto."""
         return self.dados.forcas @ u
 
     def sensibilidades_sem_filtro(self, u: np.ndarray) -> np.ndarray:
-        """Calcula as sensibilidades dos elementos"""
+        """Calcula as sensibilidades da função objetivo e da restrição de volume do problema de otimização
+        sem a aplicação de qualquer filtro. Neste caso, as densidades relativas dos elementos são as variáveis
+        de projeto do problema."""
         kelems = self.dados.k_elems
         gl_elems = self.dados.graus_liberdade_elementos
         sens = np.zeros(self.dados.num_elementos())
@@ -192,19 +210,19 @@ class OC:
             ValueError:
                 Se o valor passado para `método` não estiver em [0, 1, 2].
         """
-        # Método de Guest (2004)
+        # Método de Guest (2004).
         if metodo == 0:
             if derivada:
                 return beta * np.exp(-beta * rho) + np.exp(-beta)
             else:
                 return 1 - np.exp(-beta * rho) + rho * np.exp(-beta)
-        # Método de Sigmund (2007)
+        # Método de Sigmund (2007).
         elif metodo == 1:
             if derivada:
                 return beta * np.exp(beta * (rho - 1)) + np.exp(-beta)
             else:
                 return np.exp(-beta * (1 - rho)) - (1 - rho) * np.exp(-beta)
-        # Método de Xu et al. (2010)
+        # Método de Xu et al. (2010).
         elif metodo == 2:
             if derivada:
                 if rho <= 0.5:
@@ -222,7 +240,8 @@ class OC:
             raise ValueError(f'O tipo de função Heaviside "{metodo}" não é válido!')
 
     def sensibilidades_esquema_projecao(self, u: np.ndarray, beta) -> tuple:
-        """Calcula as sensibilidades da função objetivo e da restrição de volume.
+        """Calcula as sensibilidades da função objetivo e da restrição de volume quando o esquema de projeção
+        é aplicado ao problema.
 
         Returns:
             sens_fo: Vetor contendo as sensibilidades da função objetivo.
@@ -253,11 +272,21 @@ class OC:
         return sens_fo, sens_vol
 
     def percentual_densidades_intermediarias(self) -> float:
-        """Retorna o percentual de densidades intermediárias da topologia"""
+        """Retorna o percentual de densidades intermediárias da topologia.
+
+        References:
+            Sigmund (2007): 10.1007/s00158-006-0087-x.
+        """
         return 100 * sum(4 * rho * (1 - rho) for rho in self.rho) / len(self.rho)
 
     def atualizar_x(self, u: np.ndarray, beta=0) -> Tuple[np.ndarray, np.ndarray]:
-        """Atualiza as variáveis de projeto (densidades nodais)"""
+        """Atualiza as variáveis de projeto (densidades nodais ou densidades relativas dos elementos)
+        utilizando o OC.
+
+        Args:
+            u: Deslocamentos nodais.
+            beta: Coeficiente de regularização da função Heaviside.
+        """
         vol_inicial = self.volume_estrutura_inicial()
         # Volume da estrutura em função das densidades correntes para os elementos
         vols_elems_solidos = self.dados.volumes_elementos_solidos
@@ -268,7 +297,7 @@ class OC:
             x = self.x
         else:
             sens_fo = self.sensibilidades_sem_filtro(u)
-            sens_vol = vols_elems_solidos * self.x_inicial
+            sens_vol = vols_elems_solidos * self.rho_inicial
             x = self.rho
 
         eta = 0.5
@@ -309,10 +338,15 @@ class OC:
 
         return x_novo
 
-    def otimizar_estrutura(self, erro_max=0.1, passo=0.5, num_max_iteracoes=50):
+    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50):
         """Aplica o processo de otimização aos dados da estrutura.
 
         Se o passo for -1, apenas um valor de p será rodado
+        Args:
+            erro_max: Máximo erro percentual permitido para que ocorra a convergência da otimização.
+            passo_p: Passo que define os acréscimos ao coeficiente de penalização do modelo SIMP `p`
+                durante a aplicação do método da continuação.
+            num_max_iteracoes: Número máximo de iterações permitidas no processo de otimização.
         """
         logger.info('Iniciando a otimização da estrutura')
 
@@ -333,13 +367,13 @@ class OC:
         # 7 -> Erro relacionado ao percentual de densidades intermediárias.
         resultados_gerais = []
 
-        # Último vetor de deslocamentos
+        # Último vetor de deslocamentos.
         u_ant = np.zeros(self.dados.num_nos() * 2)
         # Contador de iterações global
         it = 0
         # Erros iniciais em porcentagem.
-        erro_u = 100
-        erro_di = 100
+        erro_u = 100  # Erro de deslocamento.
+        erro_di = 100  # Erro devido ao percentual de densidades intermediárias.
         # Percentual de densidadaes intermediárias inicial.
         di_ant = 100
 
@@ -353,7 +387,7 @@ class OC:
             """
             logger.info(f'{10 * "-"} {p=}\t {beta=} {10 * "-"}\n')
 
-            nonlocal u_ant, it, erro_u,erro_di, di_ant
+            nonlocal u_ant, it, erro_u, erro_di, di_ant
 
             # Interface com Julia
             self.julia.p = self.p = p
@@ -423,8 +457,8 @@ class OC:
 
         # Método da continuidade.
         # Vetor iterável de coeficientes de penalização.
-        if passo != -1:
-            ps = np.arange(1, self.p + 0.1, passo)
+        if passo_p != -1:
+            ps = np.arange(1, self.p + 0.1, passo_p)
         else:
             ps = [self.p]
 
@@ -435,7 +469,7 @@ class OC:
         # Continuidade em beta.
         if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
             # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
-            # 1.5 * 1/3 = 0.5
+            # 1.5 * 1/3 = 0.5.
             beta_i = 1 / 3
             for i in range(num_max_iteracoes):
                 dens_i = self.percentual_densidades_intermediarias()
