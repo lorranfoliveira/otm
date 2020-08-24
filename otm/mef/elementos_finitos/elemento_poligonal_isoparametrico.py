@@ -1,8 +1,6 @@
 import numpy as np
 import symengine
 from loguru import logger
-import shapely.geometry as sh_geo
-import matplotlib.pyplot as plt
 from otm.mef.elementos_finitos.base_elemento_poligonal import BaseElementoPoligonal
 
 __all__ = ['ElementoPoligonalIsoparametrico']
@@ -149,39 +147,3 @@ class ElementoPoligonalIsoparametrico(BaseElementoPoligonal):
 
         return self.banco_pontos_pesos_gauss[self.num_nos]
 
-    def plotar_funcao_forma(self, id_no: int = 0, tipo: str = '2d'):
-        logger.debug(f'Plotando a função de forma de {id_no=}')
-
-        funcs = self.funcoes_forma()
-        x = np.linspace(-1, 1, 300)
-        y = np.linspace(-1, 1, 300)
-        xx, yy = np.meshgrid(x, y)
-        zz = funcs(xx, yy)[id_no]
-
-        # Exclusão da parte inválida do gráfico
-        poli = sh_geo.Polygon(self.nos)
-
-        for i in range(zz.shape[0]):
-            for j in range(zz.shape[1]):
-                p = sh_geo.Point(xx[i, j], yy[i, j])
-                if poli.disjoint(p):
-                    zz[i, j] = np.nan
-
-        # Plotagem
-        if tipo == '2d':
-            fig, ax = plt.subplots(1, 1)
-            cp = ax.contourf(xx, yy, zz, cmap='viridis')
-            fig.colorbar(cp)
-            ax.axis('equal')
-        elif tipo == '3d':
-            fig = plt.figure()
-            ax = fig.gca(projection='3d')
-            surf = ax.plot_surface(xx, yy, zz, cmap='hsv', linewidth=0, antialiased=False)
-            fig.colorbar(surf)
-        else:
-            raise ValueError(f'O parâmetro "{tipo}" não é um tipo válido. Escolha entre "2d" e "3d".')
-
-        plt.axis('off')
-        plt.grid(b=None)
-
-        plt.show()

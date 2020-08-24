@@ -4,9 +4,12 @@ from matplotlib import patches
 from matplotlib.collections import PatchCollection, PathCollection
 from matplotlib import path
 from otm.mef.estrutura import Estrutura
+from otm.mef.elementos_finitos.elemento_poligonal_isoparametrico import ElementoPoligonalIsoparametrico
 from matplotlib import cm
+import shapely.geometry as geo
 from otm.otimizador.oc import OC
 from otm.dados import Dados
+from sympy.utilities.lambdify import lambdify
 import numpy as np
 
 __all__ = ['Plot']
@@ -17,6 +20,44 @@ class Plot:
 
     def __init__(self, dados: Dados):
         self.dados = dados
+
+    @staticmethod
+    def plotar_funcao_forma_elemento(num_lados: int, id_no: int = 0):
+        """Plota o gráfico da função de forma para um elemento isoparamétrico com `n` lados.
+
+        Args:
+            num_lados: Número de lados que possui o elemento isoparamétrico.
+            id_no: Identificação do nó de referência onde a função de forma valerá 1.
+        """
+        elem = ElementoPoligonalIsoparametrico(num_lados)
+        func_symb = elem.funcoes_forma()[id_no]
+        func_lamb = lambdify(func_symb.free_symbols, func_symb, 'numpy')
+
+        n = 300
+        x = np.linspace(-1, 1, n)
+        y = np.linspace(-1, 1, n)
+        xx, yy = np.meshgrid(x, y)
+        zz = func_lamb(xx, yy)
+
+        # Exclusão da parte inválida do gráfico
+        poli = geo.Polygon(elem.nos)
+
+        for i in range(zz.shape[0]):
+            for j in range(zz.shape[1]):
+                p = geo.Point(xx[i, j], yy[i, j])
+                if poli.disjoint(p):
+                    zz[i, j] = np.nan
+
+        # Plotagem
+        fig, ax = plt.subplots(1, 1)
+        cp = ax.contourf(xx, yy, zz, cmap='viridis')
+        fig.colorbar(cp)
+        ax.axis('equal')
+
+        plt.axis('off')
+        plt.grid(b=None)
+
+        plt.show()
 
     def posicao_nos_deslocados(self, escala: int = 1) -> np.ndarray:
         """Retorna uma matriz com as coordenadas dos nós deslocados.
