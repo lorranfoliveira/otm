@@ -18,7 +18,7 @@ from random import uniform
 import matplotlib.pyplot as plt
 import zipfile
 
-__all__ = ['GeradorMalha']
+__all__ = ['Malha']
 
 
 def _multipoint_para_numpy(pontos: MultiPoint) -> np.ndarray:
@@ -29,22 +29,21 @@ def _multipoint_para_numpy(pontos: MultiPoint) -> np.ndarray:
     return pontos_np
 
 
-class GeradorMalha:
+class Malha:
     """Classe responsável pela criação da malha de uma estrutura a partir de um arquivo DXF."""
 
     # Palavras chave
-    carga_txt = 'carga'
-    furo_txt = 'furo'
-    apoios_txt = 'apoios'
-    geometria_txt = 'geometria'
-    rastreador_nos_txt = 'rastreador_nos'
-    tipo_layer = [carga_txt, furo_txt, apoios_txt, geometria_txt, rastreador_nos_txt]
+    LAYER_CARGA = 'carga'
+    LAYER_FURO = 'furo'
+    LAYER_GEOMETRIA = 'geometria'
+    LAYER_RASTREADOR_NOS = 'rastreador_nos'
+    LAYERS = [LAYER_CARGA, LAYER_FURO, LAYER_GEOMETRIA, LAYER_RASTREADOR_NOS]
 
     def __init__(self, dados: Dados, num_elems: int, tipo_malha='poligonal'):
         """Construtor.
 
         Args:
-            arquivo_dxf: Nome do arquivo dxf a ser lido.
+            dados: Objeto que manipula os dados dos arquivos do problema.
             num_elems: Número de elementos finitos que serão gerados.
             tipo_malha: Tipo de distribuição das sementes dos diagramas de Voronoi. Pode ser 'poligonal' ou 'retangular'.
         """
@@ -67,7 +66,7 @@ class GeradorMalha:
         """
         dic = {}
         for layer in self.layers:
-            if any(layer.startswith(i) for i in GeradorMalha.tipo_layer):
+            if any(layer.startswith(i) for i in Malha.LAYERS):
                 n = len(self.layers[layer])
                 dic[layer] = np.zeros((n, 4))
                 for j in range(n):
@@ -78,8 +77,8 @@ class GeradorMalha:
     def _contorno_geometria(self) -> MultiLineString:
         """Retorna um objeto contendo todas as linhas do contorno da geometria, excluindo-se os furos."""
         lin_layers = self._dicionario_linhas_dxf()
-        linhas: List[Optional[LineString]] = len(lin_layers[GeradorMalha.geometria_txt]) * [None]
-        for i, lin in enumerate(lin_layers[GeradorMalha.geometria_txt]):
+        linhas: List[Optional[LineString]] = len(lin_layers[Malha.LAYER_GEOMETRIA]) * [None]
+        for i, lin in enumerate(lin_layers[Malha.LAYER_GEOMETRIA]):
             x1, y1, x2, y2 = lin
             linhas[i] = LineString([(x1, y1), (x2, y2)])
 
@@ -97,10 +96,10 @@ class GeradorMalha:
 
         nome_arq_txt = ARQUIVOS_DADOS_ZIP[16]
 
-        if any(i.startswith(GeradorMalha.rastreador_nos_txt) for i in lin_layers):
+        if any(i.startswith(Malha.LAYER_RASTREADOR_NOS) for i in lin_layers):
             with open(nome_arq_txt, 'w') as arq:
                 for rast in lin_layers:
-                    if rast.startswith(GeradorMalha.rastreador_nos_txt):
+                    if rast.startswith(Malha.LAYER_RASTREADOR_NOS):
                         linhas = []
                         for lin in lin_layers[rast]:
                             x1, y1, x2, y2 = lin
@@ -138,7 +137,7 @@ class GeradorMalha:
         furos = []
         lin_layers = self._dicionario_linhas_dxf()
         for fur in lin_layers:
-            if fur.startswith(GeradorMalha.furo_txt):
+            if fur.startswith(Malha.LAYER_FURO):
                 linhas = []
                 for lin in lin_layers[fur]:
                     x1, y1, x2, y2 = lin

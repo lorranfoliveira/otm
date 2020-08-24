@@ -1,5 +1,5 @@
 from otm.mef import *
-from otm.gerador_malha import *
+from otm.malha import *
 from otm.dados import *
 
 __author__ = 'Lorran Ferreira Oliveira'
