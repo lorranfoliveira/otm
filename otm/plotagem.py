@@ -1,11 +1,13 @@
 from loguru import logger
 import matplotlib.pyplot as plt
 from matplotlib import patches
-from matplotlib.collections import PatchCollection
+from matplotlib.collections import PatchCollection, PathCollection
 from matplotlib import path
+from otm.mef.estrutura import Estrutura
 from matplotlib import cm
 from otm.otimizador.oc import OC
 from otm.dados import Dados
+import numpy as np
 
 __all__ = ['Plot']
 
@@ -15,6 +17,14 @@ class Plot:
 
     def __init__(self, dados: Dados):
         self.dados = dados
+
+    def posicao_nos_deslocados(self, escala: int = 1) -> np.ndarray:
+        """Retorna uma matriz com as coordenadas dos nós deslocados.
+
+        Args:
+            escala: Escala aplicada nos deslocamentos para o auxílio na plotagem.
+        """
+        return self.dados.nos + escala * self.dados.deslocamentos_por_no()
 
     def plotar_grafico_generico(self, id_y: int = 3, titulo: str = ''):
         """Plota um gráfico de um dado genérico em `y` em função das iterações `x`.
@@ -82,6 +92,85 @@ class Plot:
         # logger.info(f'Salvando a malha final em "{arquivo_entrada_dados.replace("zip", "svg")}"')
         plt.axis('off')
         plt.grid(b=None)
+        plt.show()
+
+    def plotar_estrutura_deformada(self, escala=1):
+        """Exibe a malha final gerada"""
+
+        logger.debug('Plotando a estrutura deformada')
+
+        # Leitura dos dados importantes
+        nos = self.dados.nos
+        poli = self.dados.poligono_dominio_estendido
+        vetor_elementos = self.dados.elementos
+        vetor_forcas = self.dados.forcas
+        vetor_apoios = self.dados.apoios
+
+        fig, ax = plt.subplots()
+        win = plt.get_current_fig_manager()
+        win.window.state('zoomed')
+        ax.axis('equal')
+
+        xmin, ymin, xmax, ymax = poli.bounds
+        dx = xmax - xmin
+        dy = ymax - ymin
+        plt.xlim(xmin - 0.1 * dx, xmax + 0.1 * dx)
+        plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
+
+        nos_def = self.posicao_nos_deslocados(escala)
+
+        elementos_poli_original = []
+        elementos_poli_deformado = []
+        # elementos_barra = []
+        for el in vetor_elementos:
+            if len(el) == 2:
+                pass
+                # verts_original = [nos[el[0]], nos[el[1]]]
+                # verts_deformado = [nos_def[el[0]], nos_def[el[1]]]
+                # codes = [Path.MOVETO, Path.LINETO]
+                # elementos_barra.append(Path(verts_original, codes))
+            elif len(el) > 2:
+                elementos_poli_original.append(patches.Polygon(self.dados.nos[el], linewidth=0.7,
+                                                               edgecolor=(0, 0, 0, 0.5), facecolor='None',
+                                                               linestyle='--'))
+                elementos_poli_deformado.append(patches.Polygon(nos_def[el], linewidth=0.7, edgecolor='black',
+                                                                facecolor=(76 / 255, 191 / 255, 63 / 255, 0.4)))
+
+        # Desenhar as cargas
+        esc = min(dx, dy)
+        dict_forcas = Estrutura.converter_vetor_forcas_em_dict(vetor_forcas)
+        dict_apoios = Estrutura.converter_vetor_apoios_em_dict(vetor_forcas.size, vetor_apoios)
+
+        for no in dict_forcas:
+            for i, cg in enumerate(dict_forcas[no]):
+                if cg != 0:
+                    delta_x, delta_y = (0.1 * esc, 0) if i == 0 else (0, 0.1 * esc)
+                    delta_x = -delta_x if i == 0 and cg < 0 else delta_x
+                    delta_y = -delta_y if i == 1 and cg < 0 else delta_y
+
+                    ax.add_patch(patches.Arrow(nos_def[no, 0], nos_def[no, 1], delta_x, delta_y, facecolor='blue',
+                                               edgecolor='blue', width=0.01 * esc, linewidth=1))
+
+        # Desenhar os apoios
+        path_apoios = []
+        for no in dict_apoios:
+            for i, ap in enumerate(dict_apoios[no]):
+                if ap != 0:
+                    p0 = nos[no]
+                    if i == 0:
+                        p1 = np.array([p0[0] - 0.025 * esc, p0[1]])
+                    else:
+                        p1 = np.array([p0[0], p0[1] - 0.025 * esc])
+
+                    path_apoios.append(path.Path([p0, p1],
+                                                 [path.Path.MOVETO, path.Path.LINETO]))
+
+        ax.add_collection(PathCollection(path_apoios, linewidths=2, edgecolors='red'))
+        ax.add_collection(PatchCollection(elementos_poli_original, match_original=True))
+        ax.add_collection(PatchCollection(elementos_poli_deformado, match_original=True))
+        plt.axis('off')
+        plt.grid(b=None)
+        plt.title(f'Estrutura original deformada       escala: {escala}')
         plt.show()
 
     def plotar_estrutura_otimizada(self, tecnica_otimizacao: int, rmin: float = 0,

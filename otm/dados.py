@@ -7,6 +7,7 @@ from shapely.wkb import loads
 from otm.constantes import ARQUIVOS_DADOS_ZIP
 from loguru import logger
 import os
+from otm.mef.elementos_finitos.elemento_poligonal import ElementoPoligonal
 
 __all__ = ['Dados']
 
@@ -32,6 +33,7 @@ class Dados:
         self._poligono_dominio_estendido: Optional[Polygon] = None
 
         # Dados da análise.
+        self._deslocamentos_estrutura_original: Optional[np.ndarray] = None
         self._forcas: Optional[np.ndarray] = None
         self._graus_liberdade_elementos: Optional[List[np.ndarray]] = None
         self._apoios: Optional[np.ndarray] = None
@@ -46,6 +48,12 @@ class Dados:
         # Dados dos resultados.
         self._resultados_rho: Optional[np.ndarray] = None
         self._resultados_gerais: Optional[np.ndarray] = None
+
+    @property
+    def deslocamentos_estrutura_original(self) -> np.ndarray:
+        if self._deslocamentos_estrutura_original is None:
+            self._deslocamentos_estrutura_original = self.ler_arquivo_entrada_dados_numpy(17)
+        return self._deslocamentos_estrutura_original
 
     @property
     def elementos(self) -> List[np.ndarray]:
@@ -126,7 +134,7 @@ class Dados:
         return self._resultados_gerais
 
     # region Leitura escrita de arquivos
-    def ler_arquivo_entrada_dados_numpy(self, n: int) -> Union[np.ndarray, list]:
+    def ler_arquivo_entrada_dados_numpy(self, n: int) -> Union[np.ndarray, List[np.ndarray]]:
         """Lê o arquivo de entrada de dados.
 
         Args:
@@ -262,6 +270,20 @@ class Dados:
     def num_elementos(self) -> int:
         """Retorna a quantidade de elementos que compõem a malha."""
         return len(self.elementos)
+
+    # endregion
+
+    # region Estrutura deformada
+    def deslocamentos_por_no(self) -> np.ndarray:
+        """Retorna uma matriz que contém os deslocamentos nodais em x e em y de cada nó da estrutura original."""
+        num_nos = self.num_nos()
+        u = self.deslocamentos_estrutura_original
+        u_nos = np.zeros((num_nos, 2))
+
+        for n in range(num_nos):
+            u_nos[n] = u[ElementoPoligonal.id_no_para_grau_liberdade(n)]
+
+        return u_nos
 
     # endregion
 

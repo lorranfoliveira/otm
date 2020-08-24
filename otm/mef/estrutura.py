@@ -4,16 +4,9 @@ from typing import List
 from scipy.sparse import csr_matrix
 import numpy as np
 from otm.constantes import ARQUIVOS_DADOS_ZIP
-import matplotlib.pyplot as plt
-from matplotlib.collections import PathCollection
-from matplotlib.path import Path
-from matplotlib import patches
-import os
 from scipy.sparse.csgraph import reverse_cuthill_mckee
 from otm.dados import Dados
 from julia import Main
-import zipfile
-import pathlib
 from otm.mef.materiais import MaterialIsotropico
 
 __all__ = ['Estrutura']
@@ -63,6 +56,8 @@ class Estrutura:
         # Permutação RCM.
         self.salvar_permutacao_rcm()
         self.salvar_dados_entrada_txt()
+        # Salvar deslocamentos nodais da estrutura original sólida.
+        self.salvar_deslocamentos_estrutura_original()
 
     def salvar_dados_entrada_txt(self):
         n = 12
@@ -177,7 +172,7 @@ class Estrutura:
         cargas = np.zeros(self.dados.num_graus_liberdade())
         for no in self.dict_forcas:
             gls = ElementoPoligonal.id_no_para_grau_liberdade(no)
-            cargas[gls] = self.dict_forcas[no]
+            cargas[list(gls)] = self.dict_forcas[no]
         return cargas
 
     @staticmethod
@@ -210,136 +205,21 @@ class Estrutura:
 
         return dic
 
-    @staticmethod
-    def deslocamentos_arquivo(arquivo: pathlib.Path) -> np.ndarray:
+    def salvar_deslocamentos_estrutura_original(self) -> np.ndarray:
         """Retorna os deslocamentos da estrutura a partir da leitura do arquivo de entrada de dados"""
         # Interface Julia
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
-        arqs = ARQUIVOS_DADOS_ZIP
-        # Leitura Julia
-        arqs_julia = [arqs[7], arqs[5], arqs[9], arqs[6], arqs[4], arqs[11]]
-        with zipfile.ZipFile(arquivo, 'r') as arq_zip:
-            for i in arqs_julia:
-                arq_zip.extract(i)
+        julia.kelems = self.dados.k_elems
+        julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
+        julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
+        julia.apoios = self.dados.apoios + 1
+        julia.forcas = self.dados.forcas
+        julia.rcm = self.dados.rcm + 1
+        julia.eval(f'dados = Dict("kelems" => kelems, "gls_elementos" => gls_elementos, '
+                   f'"gls_estrutura" => gls_estrutura, "apoios" => apoios, "forcas" => forcas, '
+                   f'"RCM" => rcm)')
 
-        julia.eval(f'dados = ler_arquivos_entrada("{arqs[7]}", "{arqs[5]}", "{arqs[9]}", "{arqs[6]}", '
-                   f'"{arqs[4]}", "{arqs[11]}")')
-
-        for i in arqs_julia:
-            os.remove(i)
-
-        julia.eval('rho = ones(length(dados["kelems"]))')
-        julia.eval('p = 1')
-
-        return julia.eval(f'deslocamentos(dados["kelems"], dados)')
-
-    @staticmethod
-    def deslocamentos_por_no(u) -> np.ndarray:
-        num_nos = int(u.shape[0] / 2)
-        u_no = np.zeros((num_nos, 2))
-
-        for n in range(num_nos):
-            u_no[n] = u[ElementoPoligonal.id_no_para_grau_liberdade(n)]
-
-        return u_no
-
-    @staticmethod
-    def posicao_nos_deformados(nos, u, multiplicador_deslocs=1) -> np.ndarray:
-        """Retorna a posição dos nós deslocados levando-se em conta um fator multiplicador."""
-        return nos + multiplicador_deslocs * Estrutura.deslocamentos_por_no(u)
-
-    def plotar_estrutura_deformada(self, arquivo, multiplicador_deslocs=1):
-        """Exibe a malha final gerada"""
-        logger.debug('Plotando a estrutura deformada')
-
-        # Leitura dos dados importantes
-        nos = self.dados.nos
-        poli = self.dados.poligono_dominio_estendido
-        vetor_elementos = self.dados.elementos
-        vetor_forcas = self.dados.forcas
-        vetor_apoios = self.dados.apoios
-
-        # Deslocamentos
-        u = Estrutura.deslocamentos_arquivo(arquivo)
-
-        fig, ax = plt.subplots()
-        win = plt.get_current_fig_manager()
-        win.window.state('zoomed')
-        ax.axis('equal')
-
-        xmin, ymin, xmax, ymax = poli.bounds
-        dx = xmax - xmin
-        dy = ymax - ymin
-        plt.xlim(xmin - 0.1 * dx, xmax + 0.1 * dx)
-        plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
-
-        nos_def = Estrutura.posicao_nos_deformados(nos, u, multiplicador_deslocs)
-
-        elementos_poli_original = []
-        elementos_poli_deformado = []
-        elementos_barra = []
-        for el in vetor_elementos:
-            codes = []
-            verts_original = []
-            verts_deformado = []
-            if len(el) == 2:
-                verts_original = [nos[el[0]], nos[el[1]]]
-                # verts_deformado = [nos_def[el[0]], nos_def[el[1]]]
-                codes = [Path.MOVETO, Path.LINETO]
-                elementos_barra.append(Path(verts_original, codes))
-            elif len(el) > 2:
-                for i, v in enumerate((nos[j], nos_def[j]) for j in el):
-                    verts_original.append(v[0])
-                    verts_deformado.append(v[1])
-                    if i == 0:
-                        codes.append(Path.MOVETO)
-                    else:
-                        codes.append(Path.LINETO)
-
-                verts_original.append(verts_original[0])
-                verts_deformado.append(verts_deformado[0])
-                codes.append(Path.CLOSEPOLY)
-                elementos_poli_original.append(Path(verts_original, codes))
-                elementos_poli_deformado.append(Path(verts_deformado, codes))
-
-        # Desenhar as cargas
-        esc = min(dx, dy)
-        dict_forcas = Estrutura.converter_vetor_forcas_em_dict(vetor_forcas)
-        dict_apoios = Estrutura.converter_vetor_apoios_em_dict(vetor_forcas.size, vetor_apoios)
-
-        for no in dict_forcas:
-            for i, cg in enumerate(dict_forcas[no]):
-                if cg != 0:
-                    delta_x, delta_y = (0.1 * esc, 0) if i == 0 else (0, 0.1 * esc)
-                    delta_x = -delta_x if i == 0 and cg < 0 else delta_x
-                    delta_y = -delta_y if i == 1 and cg < 0 else delta_y
-
-                    ax.add_patch(
-                        patches.Arrow(nos_def[no, 0], nos_def[no, 1], delta_x, delta_y, facecolor='blue',
-                                      edgecolor='blue', width=0.01 * esc, linewidth=1))
-
-        # Desenhar os apoios
-        path_apoios = []
-        for no in dict_apoios:
-            for i, ap in enumerate(dict_apoios[no]):
-                if ap != 0:
-                    p0 = nos[no]
-                    if i == 0:
-                        p1 = np.array([p0[0] - 0.025 * esc, p0[1]])
-                    else:
-                        p1 = np.array([p0[0], p0[1] - 0.025 * esc])
-
-                    path_apoios.append(Path([p0, p1], [Path.MOVETO, Path.LINETO]))
-
-        # ax.add_collection(PathCollection(elementos_poli, linewidths=1, edgecolors='black', facecolors='#6fe8af'))
-        ax.add_collection(PathCollection(elementos_poli_original, linewidths=0.7, edgecolors=(0, 0, 0, 0.5),
-                                         facecolors=(0, 0, 0, 0), linestyles='--'))
-        ax.add_collection(PathCollection(elementos_poli_deformado, linewidths=0.7, edgecolors='black',
-                                         facecolors=(76 / 255, 191 / 255, 63 / 255, 0.4)))
-        ax.add_collection(PathCollection(path_apoios, linewidths=2, edgecolors='red'))
-        ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
-
-        plt.axis('off')
-        plt.grid(b=None)
-        plt.show()
+        u = julia.eval(f'deslocamentos(dados["kelems"], dados)')
+        self.dados.salvar_arquivo_numpy(u, 17)
+        return u
