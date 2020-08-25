@@ -13,7 +13,9 @@ __all__ = ['Dados']
 
 
 class Dados:
-    """Classe dedicada à extração dos dados dos arquivos internos ao `.zip` do problema."""
+    """Classe dedicada à extração dos dados dos arquivos internos ao `.zip` do problema.
+    As properties são implementadas de forma que os arquivos que elas retornam sejam carregados
+    apenas uma vez."""
     IDS_DADOS_MALHA = [0, 1, 10]
     IDS_DADOS_ANALISE = [4, 5, 6, 7, 8, 9, 11]
     IDS_DADOS_OTIMIZACAO = [2]
@@ -51,84 +53,110 @@ class Dados:
 
     @property
     def deslocamentos_estrutura_original(self) -> np.ndarray:
+        """Deslocamentos da estrutura considerando sólidos todos os elementos do domínio estendido."""
         if self._deslocamentos_estrutura_original is None:
             self._deslocamentos_estrutura_original = self.ler_arquivo_entrada_dados_numpy(17)
         return self._deslocamentos_estrutura_original
 
     @property
     def elementos(self) -> List[np.ndarray]:
+        """Lista contendo os nós que compõem cada elemento finito da discretização."""
         if self._elementos is None:
             self._elementos = self.ler_arquivo_entrada_dados_numpy(0)
         return self._elementos
 
     @property
     def nos(self) -> np.ndarray:
+        """Nós que compõem a malha."""
         if self._nos is None:
             self._nos = self.ler_arquivo_entrada_dados_numpy(1)
         return self._nos
 
     @property
     def forcas(self) -> np.ndarray:
+        """Vetor de forças."""
         if self._forcas is None:
             self._forcas = self.ler_arquivo_entrada_dados_numpy(4)
         return self._forcas
 
     @property
     def graus_liberdade_elementos(self) -> List[np.ndarray]:
+        """Lista com os graus de liberdade de cada elemento finito."""
         if self._graus_liberdade_elementos is None:
             self._graus_liberdade_elementos = self.ler_arquivo_entrada_dados_numpy(5)
         return self._graus_liberdade_elementos
 
     @property
     def apoios(self) -> np.ndarray:
+        """Vetor de graus de liberdade com deslocamentos restritos."""
         if self._apoios is None:
             self._apoios = self.ler_arquivo_entrada_dados_numpy(6)
         return self._apoios
 
     @property
     def k_elems(self) -> List[np.ndarray]:
+        """Lista com a matriz de rigidez de todos os elementos finitos sólidos."""
         if self._k_elems is None:
             self._k_elems = self.ler_arquivo_entrada_dados_numpy(7)
         return self._k_elems
 
     @property
     def volumes_elementos_solidos(self) -> np.ndarray:
+        """Vetor contendo os volumes sólidos dos elementos finitos da malha."""
         if self._volumes_elementos_solidos is None:
             self._volumes_elementos_solidos = self.ler_arquivo_entrada_dados_numpy(8)
         return self._volumes_elementos_solidos
 
     @property
     def graus_liberdade_estrutura(self) -> np.ndarray:
+        """Vetor contendo a correspondência entre os graus de liberdade sequencialmente numerados e os
+        numerados com a retirada dos graus de liberdade impedidos."""
         if self._graus_liberdade_estrutura is None:
             self._graus_liberdade_estrutura = self.ler_arquivo_entrada_dados_numpy(9)
         return self._graus_liberdade_estrutura
 
     @property
     def poligono_dominio_estendido(self) -> Polygon:
+        """Polígono do Shapely que representa a geometria do domínio estendido."""
         if self._poligono_dominio_estendido is None:
             self._poligono_dominio_estendido = self.ler_arquivo_wkb_shapely()
         return self._poligono_dominio_estendido
 
     @property
     def rcm(self) -> np.ndarray:
+        """Vetor de permutação da matriz de rigidez pelo método de redução de banda Reverse Cuthill Machee."""
         if self._rcm is None:
             self._rcm = self.ler_arquivo_entrada_dados_numpy(11)
         return self._rcm
 
     @property
     def pesos_esquema_projecao(self) -> List[np.ndarray]:
+        """Pesos que representam a influência dos nós sobre os elementos. Em cada índice, a primeira coluna
+        da matriz contém a id do nó e a segunda seu peso para o elemento do índice em questão."""
         if self._pesos_esquema_projecao is None:
             self._pesos_esquema_projecao = self.ler_arquivo_entrada_dados_numpy(13)
         return self._pesos_esquema_projecao
 
     @property
     def resultados_rho(self) -> np.ndarray:
+        """Matriz contendo os `rhos` de todos os elementos em cada iteração da otimização."""
         if self._resultados_rho is None:
             self._resultados_rho = self.ler_arquivo_entrada_dados_numpy(14)
         return self._resultados_rho
 
     @property
     def resultados_gerais(self) -> np.ndarray:
+        """Matriz que contém os demais resultados. Cada linha representa uma iteração, assim como
+        ocorre com `resultados_rho`. Os índices obededecem a seguinte ordem:
+        0 -> Id da iteração para valores constantes de `p` e `beta`, ou `c` (do código abaixo).
+        1 -> `p`.
+        2 -> `beta`.
+        3 -> Valor da função objetivo.
+        4 -> Percentual de volume da estrutura após a otimização em relação ao volume inicial.
+        5 -> Percentual de densidades intermediárias.
+        6 -> Erro relacionado aos deslocamentos.
+        7 -> Erro relacionado ao percentual de densidades intermediárias.
+        """
         if self._resultados_gerais is None:
             self._resultados_gerais = self.ler_arquivo_entrada_dados_numpy(15)
         return self._resultados_gerais
