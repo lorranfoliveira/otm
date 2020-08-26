@@ -128,20 +128,13 @@ class Estrutura:
         # Salvar o vetor rcm.
         self.dados.salvar_arquivo_numpy(rcm, 11)
 
-    def graus_liberdade_elementos(self):
+    def graus_liberdade_elementos(self) -> List[np.ndarray]:
         gles = []
-        for e in self.elementos_poligonais:
-            gles.append(e.graus_liberdade())
-
-        return gles
+        return [e.graus_liberdade() for e in self.elementos_poligonais]
 
     def volumes_elementos(self) -> np.ndarray:
         """Retorna os volumes dos elementos finitos"""
-        volumes = np.zeros(len(self.elementos_poligonais))
-        for i in range(len(self.elementos_poligonais)):
-            volumes[i] = self.espessura * self.elementos_poligonais[i].poligono().area
-
-        return volumes
+        return np.array([self.espessura * el.poligono().area for el in self.elementos_poligonais])
 
     def matrizes_rigidez_elementos(self) -> List[np.ndarray]:
         """Retorna as matrizes de rigidez dos elementos"""
