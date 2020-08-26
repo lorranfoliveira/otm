@@ -144,8 +144,6 @@ class Plot:
         nos = self.dados.nos
         poli = self.dados.poligono_dominio_estendido
         vetor_elementos = self.dados.elementos
-        vetor_forcas = self.dados.forcas
-        vetor_apoios = self.dados.apoios
 
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
@@ -179,8 +177,8 @@ class Plot:
 
         # Desenhar as cargas
         esc = min(dx, dy)
-        dict_forcas = Estrutura.converter_vetor_forcas_em_dict(vetor_forcas)
-        dict_apoios = Estrutura.converter_vetor_apoios_em_dict(vetor_forcas.size, vetor_apoios)
+        dict_forcas = Estrutura.converter_vetor_forcas_em_dict(self.dados)
+        dict_apoios = Estrutura.converter_vetor_apoios_em_dict(self.dados)
 
         for no in dict_forcas:
             for i, cg in enumerate(dict_forcas[no]):

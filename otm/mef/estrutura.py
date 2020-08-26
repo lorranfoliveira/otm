@@ -13,11 +13,22 @@ __all__ = ['Estrutura']
 
 
 class Estrutura:
-    """Implementa as propriedades de uma estrutura"""
+    """Implementa as propriedades de uma estrutura."""
 
     def __init__(self, dados: Dados, concreto: MaterialIsotropico, dict_cargas: dict, dict_apoios: dict,
                  espessura: float = 1):
-        # dict_cargas_apoios
+        """Construtor.
+
+        Args:
+            dados: Objeto que intermedia o acesso e a gravação dos dados do arquivo `.zip`.
+            concreto: Material utilizado na malha bidimensional.
+            dict_cargas: Dicionário contendo a numeração do nó na chave e uma tupla com as cargas em x e y
+                no nó. {num_no: (carga_x, carga_y)}.
+            dict_apoios: Dicionário contendo a numeração do nó na chave e uma tupla contendo o tipo de
+                restrição do nó. Se a restrição for 1, o grau de liberdade estará impedido. Se for 0, o grau
+                de liberdade estará livre. {num_no: (deslocabilidade_x, deslocabilidade_y)}.
+            espessura: Espessura dos elementos da malha bidimensional.
+        """
         self.dados = dados
         self.concreto = concreto
         self.espessura = espessura
@@ -30,21 +41,14 @@ class Estrutura:
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
 
-    def carregar_e_salvar_dados(self):
-        # A ordem das funções abaixo deve ser mantida
-        self.criar_elementos_poligonais()
-        self.salvar_dados_estrutura()
-
-        logger.debug(f'Elementos: {len(self.elementos_poligonais)}, Nós: {len(self.dados.nos)}, '
-                     f'GL: {2 * len(self.dados.nos)}')
-
     def salvar_dados_estrutura(self):
-        """Salva os dados da estrutura"""
+        """Salva os dados da estrutura necessários para a análise estrutural."""
         # Não alterar a ordem das funções abaixo
+        self.criar_elementos_poligonais()
         # Vetor de forças.
-        self.dados.salvar_arquivo_numpy(self.converter_dict_forcas_para_vetor_forcas(), 4)
+        self.dados.salvar_arquivo_numpy(self.criar_vetor_forcas(), 4)
         # Vetor de apoios.
-        self.dados.salvar_arquivo_numpy(self.converter_dict_apoios_para_vetor_apoios(), 6)
+        self.dados.salvar_arquivo_numpy(self.criar_vetor_apoios(), 6)
         # Graus de liberdade por elemento.
         self.dados.salvar_arquivo_numpy(self.graus_liberdade_elementos(), 5)
         # Graus de liberdade da estrutura.
@@ -59,6 +63,9 @@ class Estrutura:
         # Salvar deslocamentos nodais da estrutura original sólida.
         self.salvar_deslocamentos_estrutura_original()
 
+        logger.debug(f'Elementos: {len(self.dados.elementos)}, Nós: {len(self.dados.nos)}, '
+                     f'GL: {2 * len(self.dados.nos)}')
+
     def salvar_dados_entrada_txt(self):
         n = 12
         arq = self.dados.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[n])
@@ -72,7 +79,8 @@ class Estrutura:
         self.dados.salvar_arquivo_generico_em_zip(ARQUIVOS_DADOS_ZIP[n])
 
     def criar_elementos_poligonais(self):
-        logger.debug('Criando os elementos finitos poligonais')
+        """Cria os objetos que representam os elementos finitos poligonais."""
+        logger.debug('Criando os elementos finitos poligonais...')
 
         self.elementos_poligonais = []
         nos = self.dados.nos
@@ -84,8 +92,9 @@ class Estrutura:
 
     def graus_liberdade_estrutura(self) -> np.array:
         """Vetor que contém os parâmetros de conversão dos graus de liberdade da forma B para a forma A.
-        Cada índice representa o valor do graus de liberdade na forma B. O valor do índice representa o grau
-        de liberdade correspondente na forma A.
+        Forma A: Numeração sequencial que CONSIDERA os graus de liberdade impedidos.
+        Forma B: Numeração sequencial que NÃO CONSIDERA os graus de liberdade impedidos. Neste caso, os
+            graus de liberdade impedidos possuem valor -1.
         """
         # Todos os graus de liberdade impedidos deverão assumir valor -1
         gls = np.full(self.dados.num_nos() * 2, -1)
@@ -104,7 +113,7 @@ class Estrutura:
         return gls
 
     def salvar_permutacao_rcm(self):
-        """Salva a permutação feita pelo Reverse Cuthill Mckee"""
+        """Salva a permutação feita pelo algoritmo de redução da banda da matriz de rigidez Reverse Cuthill Mckee."""
         # Interface Julia
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
@@ -129,16 +138,16 @@ class Estrutura:
         self.dados.salvar_arquivo_numpy(rcm, 11)
 
     def graus_liberdade_elementos(self) -> List[np.ndarray]:
-        gles = []
+        """Retorna uma lista contendo vetores com os graus de liberdade de cada elemento da malha."""
         return [e.graus_liberdade() for e in self.elementos_poligonais]
 
     def volumes_elementos(self) -> np.ndarray:
-        """Retorna os volumes dos elementos finitos"""
+        """Retorna um vetor com os volumes dos elementos finitos."""
         return np.array([self.espessura * el.poligono().area for el in self.elementos_poligonais])
 
     def matrizes_rigidez_elementos(self) -> List[np.ndarray]:
-        """Retorna as matrizes de rigidez dos elementos"""
-        logger.debug('Calculando as matrizes de rigidez dos elementos')
+        """Retorna as matrizes de rigidez dos elementos."""
+        logger.debug('Calculando as matrizes de rigidez dos elementos...')
 
         nel = len(self.elementos_poligonais)
         kels = []
@@ -150,7 +159,9 @@ class Estrutura:
             kels.append(e.matriz_rigidez())
         return kels
 
-    def converter_dict_apoios_para_vetor_apoios(self) -> np.ndarray:
+    def criar_vetor_apoios(self) -> np.ndarray:
+        """Cria um vetor com a identificação dos graus de liberdade apoiados em função do dicionário de
+        apoios nodais."""
         vet_apoios = []
         for no in self.dict_apoios:
             gls = ElementoPoligonal.id_no_para_grau_liberdade(no)
@@ -161,7 +172,8 @@ class Estrutura:
                     raise ValueError(f'O valor não é aceito como restrição de deslocamento do nó {no}')
         return np.array(vet_apoios, dtype=int)
 
-    def converter_dict_forcas_para_vetor_forcas(self) -> np.ndarray:
+    def criar_vetor_forcas(self) -> np.ndarray:
+        """Cria o vetor de forças da estrutura a partir do dicionário de forças."""
         cargas = np.zeros(self.dados.num_graus_liberdade())
         for no in self.dict_forcas:
             gls = ElementoPoligonal.id_no_para_grau_liberdade(no)
@@ -169,26 +181,34 @@ class Estrutura:
         return cargas
 
     @staticmethod
-    def converter_vetor_forcas_em_dict(forcas) -> dict:
-        """Converte um vetor de forças ou de apoios em uma relação do numpy.
-        dic = {no: [dado_x, dado_y]}
+    def converter_vetor_forcas_em_dict(dados: Dados) -> dict:
+        """Converte um vetor de forças em um dicionário de forças.
+        dic = {no: [dado_x, dado_y]}.
+
+        Args:
+            dados: Objeto que intermedia o acesso aos dados do problema.
         """
         dic = {}
-
+        forcas = dados.forcas
         for i in range(0, forcas.shape[0], 2):
             v = forcas[[i, i + 1]]
             if any(vtmp for vtmp in v):
                 no = int(i / 2)
                 dic[no] = v.tolist()
-
         return dic
 
     @staticmethod
-    def converter_vetor_apoios_em_dict(num_graus_liberdade, apoios) -> dict:
+    def converter_vetor_apoios_em_dict(dados: Dados) -> dict:
+        """Converte um vetor de apoios em um dicionário de apoios.
+        dic = {no: [desloc_x, desloc_y]}.
+
+        Args:
+            dados: Objeto que intermedia o acesso aos dados do problema.
+        """
         dic = {}
 
-        vetor_apoios_def = np.zeros(num_graus_liberdade, dtype=int)
-        vetor_apoios_def[apoios] = 1
+        vetor_apoios_def = np.zeros(dados.num_graus_liberdade(), dtype=int)
+        vetor_apoios_def[dados.apoios] = 1
 
         for i in range(0, vetor_apoios_def.shape[0], 2):
             v = vetor_apoios_def[[i, i + 1]]
@@ -199,7 +219,11 @@ class Estrutura:
         return dic
 
     def salvar_deslocamentos_estrutura_original(self) -> np.ndarray:
-        """Retorna os deslocamentos da estrutura a partir da leitura do arquivo de entrada de dados"""
+        """Salva o vetor de deslocamentos nodais da estrutura original (domínio estendido sólido).
+
+        Returns:
+            Vetor de deslocamentos nodais da estrutura original.
+        """
         # Interface Julia
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')

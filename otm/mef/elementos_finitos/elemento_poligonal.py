@@ -34,7 +34,7 @@ class ElementoPoligonal(BaseElementoPoligonal):
         for no in self.id_nos:
             gls_i = self.id_no_para_grau_liberdade(no)
             gl += gls_i
-        return np.array(gl)
+        return np.array(gl, dtype=int)
 
     def elemento_referencia(self) -> ElementoPoligonalIsoparametrico:
         """Retorna o elemento isoparamétrico de referência."""
