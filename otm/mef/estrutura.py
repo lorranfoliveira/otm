@@ -1,4 +1,4 @@
-from otm.mef.elementos.elemento_poligonal import ElementoPoligonal
+from otm.mef.elementos import ElementoPoligonal
 from loguru import logger
 from typing import List
 from scipy.sparse import csr_matrix

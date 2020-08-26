@@ -1,6 +1,6 @@
 import numpy as np
 
-__all__ = ['MaterialIsotropico']
+__all__ = ['MaterialIsotropico', 'Material']
 
 
 class Material:
