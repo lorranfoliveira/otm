@@ -1,5 +1,5 @@
-from otm.mef.elementos_finitos.elemento_poligonal_isoparametrico import ElementoPoligonalIsoparametrico
-from otm.mef.elementos_finitos.base_elemento_poligonal import BaseElementoPoligonal
+from otm.mef.elementos.elemento_poligonal_isoparametrico import ElementoPoligonalIsoparametrico
+from otm.mef.elementos.base_elemento_poligonal import BaseElementoPoligonal
 import numpy as np
 import shapely.geometry as geo
 from matplotlib.path import Path

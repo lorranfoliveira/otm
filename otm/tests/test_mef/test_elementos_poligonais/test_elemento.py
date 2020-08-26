@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from otm.mef.elementos_finitos.base_elemento_poligonal import BaseElementoPoligonal
+from otm.mef.elementos.base_elemento_poligonal import BaseElementoPoligonal
 from otm import ElementoPoligonalIsoparametrico
 from shapely.geometry import Polygon
 

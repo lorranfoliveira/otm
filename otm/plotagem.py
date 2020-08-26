@@ -4,7 +4,7 @@ from matplotlib import patches
 from matplotlib.collections import PatchCollection, PathCollection
 from matplotlib import path
 from otm.mef.estrutura import Estrutura
-from otm.mef.elementos_finitos.elemento_poligonal_isoparametrico import ElementoPoligonalIsoparametrico
+from otm.mef.elementos.elemento_poligonal_isoparametrico import ElementoPoligonalIsoparametrico
 from matplotlib import cm
 import shapely.geometry as geo
 from otm.otimizador.oc import OC

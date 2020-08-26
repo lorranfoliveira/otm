@@ -1,5 +1,5 @@
-from otm.mef.elementos_finitos.base_elemento_poligonal import BaseElementoPoligonal
-from otm.mef.elementos_finitos.elemento import Elemento
+from otm.mef.elementos.base_elemento_poligonal import BaseElementoPoligonal
+from otm.mef.elementos.elemento import Elemento
 import numpy as np
 from otm.mef.materiais import Material
 from math import dist

@@ -1,7 +1,7 @@
 import numpy as np
 import symengine
 from loguru import logger
-from otm.mef.elementos_finitos.base_elemento_poligonal import BaseElementoPoligonal
+from otm.mef.elementos.base_elemento_poligonal import BaseElementoPoligonal
 
 __all__ = ['ElementoPoligonalIsoparametrico']
 

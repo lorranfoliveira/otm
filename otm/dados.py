@@ -7,7 +7,7 @@ from shapely.wkb import loads
 from otm.constantes import ARQUIVOS_DADOS_ZIP
 from loguru import logger
 import os
-from otm.mef.elementos_finitos.elemento_poligonal import ElementoPoligonal
+from otm.mef.elementos.elemento_poligonal import ElementoPoligonal
 
 __all__ = ['Dados']
 

@@ -1,6 +1,6 @@
 import numpy as np
 import shapely.geometry as sh_geo
-from otm.mef.elementos_finitos.elemento import Elemento
+from otm.mef.elementos.elemento import Elemento
 from typing import List
 from otm.mef.materiais import Material
 
