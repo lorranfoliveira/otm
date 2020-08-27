@@ -225,7 +225,7 @@ class Dados:
         arq_np = self.arquivo.parent.joinpath(ARQUIVOS_DADOS_ZIP[n])
         arq_np_str = str(arq_np)
         with zipfile.ZipFile(self.arquivo, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
-            if self.arquivo.name not in arq_zip.namelist():
+            if arq_np.name not in arq_zip.namelist():
                 logger.info(f'Salvando "{arq_np.name}" em "{self.arquivo.name}..."')
 
                 if arq_np_str.endswith('.npy'):
@@ -243,6 +243,9 @@ class Dados:
 
                 arq_zip.write(arq_np.name)
                 os.remove(arq_np_str)
+            else:
+                logger.warning(f'O arquivo "{arq_np.name}" já existe em "{self.arquivo.name}". Faça sua exclusão '
+                               f'manualmente para substituí-lo.')
 
     def salvar_arquivo_generico_em_zip(self, nome_arquivo: str):
         arquivo_generico = self.arquivo.parent.joinpath(nome_arquivo)
