@@ -251,3 +251,44 @@ class Estrutura:
         u = julia.eval(f'deslocamentos(dados["kelems"], dados)')
         self.dados.salvar_arquivo_numpy(u, 17)
         return u
+
+    @staticmethod
+    def deformacoes_elementos(dados: Dados, u: np.ndarray) -> np.ndarray:
+        """Retorna um vetor contendo as deformações dos elementos finitos.
+        Para os elementos poligonais, as deformações são calculadas em seus centroides."""
+        defs = []
+
+        for i in range(dados.num_elementos()):
+            # TODO implementar para elementos de barra
+            if len(dados.elementos[i]) > 2:
+                defs.append(dados.matrizes_b_centroide[i] @ u[dados.graus_liberdade_elementos[i]])
+
+        return defs
+
+    @staticmethod
+    def tensoes_elementos(dados: Dados, u: np.ndarray) -> np.ndarray:
+        """Retorna um vetor com as tensões principais de maior módulo que atuam nos centroides dos elementos
+        poligonais.
+        TODO implementar para barras"""
+        n = dados.num_elementos()
+        tensoes = np.zeros(n)
+        epsilons = Estrutura.deformacoes_elementos(dados, u)
+        # Matriz constitutiva elástica.
+        material = MaterialIsotropico(1, 0.3)
+        d = material.matriz_constitutiva()
+        e_aco = 20
+
+        for i in range(n):
+            if len(dados.elementos[i]) > 2:
+                # Tensões no sistema global.
+                sx, sy, txy = d @ epsilons[i]
+                # Tensões principais
+                p1 = (sx + sy) / 2
+                p2 = np.sqrt(((sx + sy) / 2) ** 2 + txy ** 2)
+                s1 = p1 + p2
+                s2 = p1 - p2
+                tensoes[i] = s1 if abs(s1) >= abs(s2) else s2
+            else:
+                tensoes[i] = e_aco * epsilons[i]
+
+        return tensoes
