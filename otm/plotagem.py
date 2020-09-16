@@ -284,3 +284,39 @@ class Plot:
 
         plt.title(f'{tecnica_otm}     {els}     {vf}     {di}    {rmin}')
         plt.show()
+
+    def plotar_tensoes_estrutura(self):
+        """Exibe a malha final gerada. cmad jet ou binary"""
+        logger.info('Criando o desenho da malha final')
+
+        # Resultados finais
+        tensoes = Estrutura.tensoes_elementos(self.dados, self.dados.deslocamentos_estrutura_original)
+
+        def normalizar_tensao(x):
+            """Função interna que normaliza as tensões dos elementos na estrutura para um intervalo
+            entre 0 e 1."""
+            return 0.0 if (x < 0) else 1.0
+
+        fig, ax = plt.subplots()
+        win = plt.get_current_fig_manager()
+        win.window.state('zoomed')
+        ax.axis('equal')
+
+        xmin, ymin, xmax, ymax = self.dados.poligono_dominio_estendido.bounds
+        dx = xmax - xmin
+        dy = ymax - ymin
+        plt.xlim(xmin - 0.1 * dx, xmax + 0.1 * dx)
+        plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
+
+        elementos_poli = []
+        for j, el in enumerate(self.dados.elementos):
+            elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
+                                                  facecolor=cm.jet(normalizar_tensao(tensoes[j]))))
+
+        ax.add_collection(PatchCollection(elementos_poli, match_original=True))
+        # ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
+        plt.axis('off')
+        plt.grid(b=None)
+
+        plt.title(f'Tensões na estrutura')
+        plt.show()
