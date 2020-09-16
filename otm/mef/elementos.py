@@ -321,5 +321,5 @@ class ElementoPoligonal(BaseElementoPoligonal):
         return k
 
     def matriz_b_origem(self) -> np.ndarray:
-        """Retorna a matriz B calculada no centroide do elemento poligonal."""
-        return self.matriz_b(*self.centroide())
+        """Retorna a matriz B calculada na origem (0, 0) do elemento isoparamétrico."""
+        return self.matriz_b(0, 0)
