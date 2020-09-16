@@ -43,6 +43,7 @@ class Dados:
         self._volumes_elementos_solidos: Optional[np.ndarray] = None
         self._graus_liberdade_estrutura: Optional[np.ndarray] = None
         self._rcm: Optional[np.ndarray] = None
+        self._matrizes_b_centroide: Optional[List[np.ndarray]] = None
 
         # Dados da otimização.
         self._pesos_esquema_projecao: Optional[List[np.array]] = None
@@ -99,6 +100,13 @@ class Dados:
         if self._k_elems is None:
             self._k_elems = self.ler_arquivo_entrada_dados_numpy(7)
         return self._k_elems
+
+    @property
+    def matrizes_b_centroide(self):
+        """Retorna as matrizes cinemáticas nodais calculadas com as coordenadas do centroide dos elementos"""
+        if self._matrizes_b_centroide is None:
+            self._matrizes_b_centroide = self.ler_arquivo_entrada_dados_numpy(18)
+        return self._matrizes_b_centroide
 
     @property
     def volumes_elementos_solidos(self) -> np.ndarray:
