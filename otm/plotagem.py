@@ -29,6 +29,9 @@ class Plot:
             num_lados: Número de lados que possui o elemento isoparamétrico.
             id_no: Identificação do nó de referência onde a função de forma valerá 1.
         """
+        plt.rcParams['pdf.fonttype'] = 42
+        plt.rcParams['font.family'] = 'Calibri'
+
         elem = ElementoPoligonalIsoparametrico(num_lados)
         func_symb = elem.funcoes_forma()[id_no]
         func_lamb = lambdify(func_symb.free_symbols, func_symb, 'numpy')
@@ -97,8 +100,6 @@ class Plot:
         logger.info('Criando o desenho da malha final')
 
         # Plotagem.
-        plt.rcParams['pdf.fonttype'] = 42
-        plt.rcParams['font.family'] = 'Calibri'
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
         win.window.state('zoomed')
@@ -220,9 +221,6 @@ class Plot:
         # Resultados finais
         rho_final = self.dados.rhos_iteracao_final()
         results_gerais_finais = self.dados.rhos_iteracao_final()
-
-        plt.rcParams['pdf.fonttype'] = 42
-        plt.rcParams['font.family'] = 'Calibri'
 
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
