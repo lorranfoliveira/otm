@@ -305,7 +305,7 @@ class ElementoPoligonal(BaseElementoPoligonal):
     def matriz_rigidez(self) -> np.ndarray:
         """Retorna a matriz de rigidez do elemento."""
         t = self.espessura
-        bfunc = self.matriz_b
+        b_func = self.matriz_b
         d = self.material.matriz_constitutiva()
 
         # Pontos e pesos de gauss
@@ -316,6 +316,10 @@ class ElementoPoligonal(BaseElementoPoligonal):
 
         # Integração numérica
         for pt, w in zip(pontos_gauss, pesos_gauss):
-            b = bfunc(*pt)
+            b = b_func(*pt)
             k += b.T @ d @ b * w * t * self.jacobiano(*pt)
         return k
+
+    def matriz_b_origem(self) -> np.ndarray:
+        """Retorna a matriz B calculada no centroide do elemento poligonal."""
+        return self.matriz_b(*self.centroide())

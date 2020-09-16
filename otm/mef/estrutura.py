@@ -62,6 +62,8 @@ class Estrutura:
         self.salvar_dados_entrada_txt()
         # Salvar deslocamentos nodais da estrutura original sólida.
         self.salvar_deslocamentos_estrutura_original()
+        # Salvar matrize cinemáticas nodais na origem dos elementos.
+        self.dados.salvar_arquivo_numpy(self.matrizes_b_origem(), 18)
 
         logger.debug(f'Elementos: {len(self.dados.elementos)}, Nós: {len(self.dados.nos)}, '
                      f'GL: {2 * len(self.dados.nos)}')
@@ -111,6 +113,15 @@ class Estrutura:
             gls[e_glb] = e_gla.copy()
 
         return gls
+
+    def matrizes_b_origem(self) -> List[np.ndarray]:
+        """Retorna as matrizes cinemáticas nodais calculadas na origem de cada elemento finito poligonal."""
+        mb = []
+
+        for e in self.elementos_poligonais:
+            mb.append(e.matriz_b_origem())
+
+        return mb
 
     def salvar_permutacao_rcm(self):
         """Salva a permutação feita pelo algoritmo de redução da banda da matriz de rigidez Reverse Cuthill Mckee."""
