@@ -285,17 +285,28 @@ class Plot:
         plt.title(f'{tecnica_otm}     {els}     {vf}     {di}    {rmin}')
         plt.show()
 
-    def plotar_tensoes_estrutura(self):
-        """Exibe a malha final gerada. cmad jet ou binary"""
+    def plotar_tensoes_estrutura(self, tipo_grafico=0):
+        """Exibe a malha final gerada. cmad jet ou binary.
+
+        Args:
+            tipo_grafico: Tipo de gráfico em que as tensões serão plotadas. 0 para plotar tensões com
+                valores intermediários; 1 para plotar tensões de tração e compressão com valores fixos
+                (gráfico com apenas duas cores).
+        """
         logger.info('Criando o desenho da malha final')
 
         # Resultados finais
         tensoes = Estrutura.tensoes_elementos(self.dados, self.dados.deslocamentos_estrutura_original)
+        max_tens_abs = np.max(np.abs(tensoes))
 
         def normalizar_tensao(x):
             """Função interna que normaliza as tensões dos elementos na estrutura para um intervalo
             entre 0 e 1."""
-            return 0.0 if (x < 0) else 1.0
+            nonlocal max_tens_abs, tipo_grafico
+            if tipo_grafico == 0:
+                return x / (2 * max_tens_abs) + 0.5
+            else:
+                return 0.0 if (x < 0) else 1.0
 
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
@@ -311,7 +322,7 @@ class Plot:
         elementos_poli = []
         for j, el in enumerate(self.dados.elementos):
             elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
-                                                  facecolor=cm.jet(normalizar_tensao(tensoes[j]))))
+                                                  facecolor=cm.seismic(normalizar_tensao(tensoes[j]))))
 
         ax.add_collection(PatchCollection(elementos_poli, match_original=True))
         # ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
