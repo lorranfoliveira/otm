@@ -1,7 +1,7 @@
 import numpy as np
-from otm.mef.materiais import Material
+from otm.mef.materiais import Material, Concreto
 import shapely.geometry as sh_geo
-from typing import List, Optional, Dict
+from typing import List, Optional
 import symengine
 from loguru import logger
 
@@ -11,7 +11,7 @@ __all__ = ['Elemento', 'BaseElementoPoligonal', 'ElementoPoligonalIsoparametrico
 class Elemento:
     """Classe abstrata que implementa as propriedades em comum dos elementos finitos."""
 
-    def __init__(self, nos: np.ndarray, material: Material):
+    def __init__(self, nos: np.ndarray, material: Concreto):
         """Construtor.
 
         Args:
@@ -306,7 +306,8 @@ class ElementoPoligonal(BaseElementoPoligonal):
         """Retorna a matriz de rigidez do elemento."""
         t = self.espessura
         b_func = self.matriz_b
-        d = self.material.matriz_constitutiva()
+
+        d = self.material.matriz_constitutiva_isotropico()
 
         # Pontos e pesos de gauss
         pontos_gauss, pesos_gauss = self.pontos_integracao_referencia()
@@ -323,3 +324,21 @@ class ElementoPoligonal(BaseElementoPoligonal):
     def matriz_b_origem(self) -> np.ndarray:
         """Retorna a matriz B calculada na origem (0, 0) do elemento isoparamétrico."""
         return self.matriz_b(0, 0)
+
+    def matrizes_b_pontos_integracao(self) -> List[np.ndarray]:
+        """Retorna as matrizes b calculadas em cada um dos pontos de integração do elemento.
+        Retorna também os pesos de integração multiplicados pela espessura e pelo jacobiano.
+        [b_i, (w_i * t * jacobiano_i)]
+        """
+        t = self.espessura
+        b_func = self.matriz_b
+        pontos_gauss, pesos_gauss = self.pontos_integracao_referencia()
+        dados = []
+
+        # Integração numérica
+        for pt, w in zip(pontos_gauss, pesos_gauss):
+            b = b_func(*pt)
+            dados.append([b, w * t * self.jacobiano(*pt)])
+        return dados
+
+

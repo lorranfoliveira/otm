@@ -1,13 +1,14 @@
 from otm.mef.elementos import ElementoPoligonal
 from loguru import logger
-from typing import List
+from typing import List, Optional
 from scipy.sparse import csr_matrix
+import os
 import numpy as np
 from otm.constantes import ARQUIVOS_DADOS_ZIP
 from scipy.sparse.csgraph import reverse_cuthill_mckee
 from otm.dados import Dados
 from julia import Main
-from otm.mef.materiais import MaterialIsotropico
+import shelve
 
 __all__ = ['Estrutura']
 
@@ -15,13 +16,11 @@ __all__ = ['Estrutura']
 class Estrutura:
     """Implementa as propriedades de uma estrutura."""
 
-    def __init__(self, dados: Dados, concreto: MaterialIsotropico, dict_cargas: dict, dict_apoios: dict,
-                 espessura: float = 1):
+    def __init__(self, dados: Dados, dict_cargas: dict, dict_apoios: dict, espessura: float = 1):
         """Construtor.
 
         Args:
             dados: Objeto que intermedia o acesso e a gravação dos dados do arquivo `.zip`.
-            concreto: Material utilizado na malha bidimensional.
             dict_cargas: Dicionário contendo a numeração do nó na chave e uma tupla com as cargas em x e y
                 no nó. {num_no: (carga_x, carga_y)}.
             dict_apoios: Dicionário contendo a numeração do nó na chave e uma tupla contendo o tipo de
@@ -30,7 +29,6 @@ class Estrutura:
             espessura: Espessura dos elementos da malha bidimensional.
         """
         self.dados = dados
-        self.concreto = concreto
         self.espessura = espessura
         self.dict_forcas = dict_cargas
         self.dict_apoios = dict_apoios
@@ -53,8 +51,12 @@ class Estrutura:
         self.dados.salvar_arquivo_numpy(self.graus_liberdade_elementos(), 5)
         # Graus de liberdade da estrutura.
         self.dados.salvar_arquivo_numpy(self.graus_liberdade_estrutura(), 9)
-        # Matrizes de rigidez dos elementos.
-        self.dados.salvar_arquivo_numpy(self.matrizes_rigidez_elementos(), 7)
+        # Salvar matrize cinemáticas nodais na origem dos elementos.
+        # TODO introduzir um verificador para evitar que dados já salvos sejam recalculados.
+        self.dados.salvar_arquivo_numpy(self.matrizes_b_origem(), 18)
+        # Salvar os dados constantes para a integração numérica em função da matriz
+        # constitutiva elástica.
+        self.salvar_matrizes_b_pontos_integracao()
         # Volumes dos elementos sólidos.
         self.dados.salvar_arquivo_numpy(self.volumes_elementos(), 8)
         # Permutação RCM.
@@ -62,8 +64,6 @@ class Estrutura:
         self.salvar_dados_entrada_txt()
         # Salvar deslocamentos nodais da estrutura original sólida.
         self.salvar_deslocamentos_estrutura_original()
-        # Salvar matrize cinemáticas nodais na origem dos elementos.
-        self.dados.salvar_arquivo_numpy(self.matrizes_b_origem(), 18)
 
         logger.debug(f'Elementos: {len(self.dados.elementos)}, Nós: {len(self.dados.nos)}, '
                      f'GL: {2 * len(self.dados.nos)}')
@@ -74,23 +74,24 @@ class Estrutura:
         with open(str(arq), 'w') as arq_txt:
             arq_txt.write(f'forcas = {self.dict_forcas}\n')
             arq_txt.write(f'apoios = {self.dict_apoios}\n')
-            arq_txt.write(f'E = {self.concreto.ec}\n')
-            arq_txt.write(f'poisson = {self.concreto.nu}\n')
+            arq_txt.write(f'E = {self.dados.concreto.ec}\n')
+            arq_txt.write(f'poisson = {self.dados.concreto.nu}\n')
             arq_txt.write(f'espessura = {self.espessura}\n')
 
         self.dados.salvar_arquivo_generico_em_zip(ARQUIVOS_DADOS_ZIP[n])
 
     def criar_elementos_poligonais(self):
-        """Cria os objetos que representam os elementos finitos poligonais."""
+        """Cria os objetos que representam os elementos finitos poligonais.
+        TODO inserir barras.
+        """
         logger.debug('Criando os elementos finitos poligonais...')
 
         self.elementos_poligonais = []
         nos = self.dados.nos
         for i, e in enumerate(self.dados.elementos):
             # Verificar se o elemento é poligonal ou de barra.
-            if len(e) > 2:
-                el = ElementoPoligonal(nos[e], self.concreto, self.espessura, e)
-                self.elementos_poligonais.append(el)
+            el = ElementoPoligonal(nos[e], self.dados.concreto, self.espessura, e)
+            self.elementos_poligonais.append(el)
 
     def graus_liberdade_estrutura(self) -> np.array:
         """Vetor que contém os parâmetros de conversão dos graus de liberdade da forma B para a forma A.
@@ -129,7 +130,7 @@ class Estrutura:
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
 
-        julia.kelems = self.dados.k_elems
+        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados, None)
         julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
         julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
         julia.apoios = self.dados.apoios + 1
@@ -137,7 +138,7 @@ class Estrutura:
         julia.eval('dados = Dict("kelems" => kelems, "gls_elementos" => gls_elementos, '
                    '"gls_estrutura" => gls_estrutura, "apoios" => apoios)')
 
-        linhas, colunas, termos = julia.eval('matriz_rigidez_estrutura(dados["kelems"], dados, true)')
+        linhas, colunas, termos = julia.eval('matriz_rigidez_estrutura(kelems, dados, true)')
 
         # Número de graus de liberdade livres.
         ngl = self.dados.num_graus_liberdade() - len(self.dados.apoios)
@@ -147,6 +148,20 @@ class Estrutura:
 
         # Salvar o vetor rcm.
         self.dados.salvar_arquivo_numpy(rcm, 11)
+
+    def salvar_matrizes_b_pontos_integracao(self):
+        """Salva as matrizes b calculadas em cada ponto de integração em um arquivo .dat com o shelve."""
+        nome_arq = ARQUIVOS_DADOS_ZIP[19]
+        dados = []
+        for e in self.elementos_poligonais:
+            dados.append(e.matrizes_b_pontos_integracao())
+
+        with shelve.open(nome_arq) as arq:
+            arq['0'] = dados
+
+        self.dados.salvar_arquivo_generico_em_zip(f'{nome_arq}.dat')
+        self.dados.salvar_arquivo_generico_em_zip(f'{nome_arq}.dir')
+        os.remove(f'{nome_arq}.bak')
 
     def graus_liberdade_elementos(self) -> List[np.ndarray]:
         """Retorna uma lista contendo vetores com os graus de liberdade de cada elemento da malha."""
@@ -169,6 +184,40 @@ class Estrutura:
                 logger.debug(f'{perc}%')
             kels.append(e.matriz_rigidez())
         return kels
+
+    @staticmethod
+    def matrizes_rigidez_elementos_2(dados: Dados, tensoes: Optional[np.ndarray] = None,
+                                     deformacoes: Optional[np.ndarray] = None) -> List[np.ndarray]:
+        """Atualiza as matrizes de rigidez dos elementos em função das tensões atuantes em cada um.
+
+        Args:
+            deformacoes:
+            dados:
+            tensoes: Tensões atuantes nos elementos.
+        """
+        # Matrizes b e pesos.
+        mb_pesos = dados.matrizes_b_pontos_integracao
+        # Matrizes de rigidez dos elementos.
+        kelems = []
+        for i in range(dados.num_elementos()):  # TODO corrigir para adicionar barras
+            # Número de nós do elemento.
+            n = len(dados.elementos[i])
+            kel = np.zeros((2 * n, 2 * n))
+            # Matriz constitutiva elástica.
+            if (dados.tipo_concreto == 0) or (tensoes is None) or (deformacoes is None):
+                d = dados.concreto.matriz_constitutiva_isotropico()
+            else:
+                d = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes[i], deformacoes[i])
+            # Iteração sobre os pontos de integração de cada elemento.
+            for j in range(len(mb_pesos[i])):
+                # Matriz cinemática nodal do elemento no ponto de integração j.
+                b_j = mb_pesos[i][j][0]
+                # Produto entre o peso da integração, a espessura do elemento e o jacobiano.
+                wtj = mb_pesos[i][j][1]
+                # Matriz de rigidez do elemento atualizada.
+                kel += b_j.T @ d @ b_j * wtj
+            kelems.append(kel)
+        return kelems
 
     def criar_vetor_apoios(self) -> np.ndarray:
         """Cria um vetor com a identificação dos graus de liberdade apoiados em função do dicionário de
@@ -238,7 +287,7 @@ class Estrutura:
         # Interface Julia
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
-        julia.kelems = self.dados.k_elems
+        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados, None)
         julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
         julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
         julia.apoios = self.dados.apoios + 1
@@ -248,7 +297,7 @@ class Estrutura:
                    f'"gls_estrutura" => gls_estrutura, "apoios" => apoios, "forcas" => forcas, '
                    f'"RCM" => rcm)')
 
-        u = julia.eval(f'deslocamentos(dados["kelems"], dados)')
+        u = julia.eval(f'deslocamentos(kelems, dados)')
         self.dados.salvar_arquivo_numpy(u, 17)
         return u
 
@@ -266,29 +315,43 @@ class Estrutura:
         return defs
 
     @staticmethod
-    def tensoes_elementos(dados: Dados, u: np.ndarray) -> np.ndarray:
+    def tensoes_elementos(dados: Dados, u: np.ndarray, tensoes_ant=None) -> np.ndarray:
         """Retorna um vetor com as tensões principais de maior módulo que atuam nos centroides dos elementos
         poligonais.
+
+        Args:
+            dados:
+            u:
+            tensoes_ant: Tensões anteriores. Se as tensões forem None, será utilizado o concreto isotrópico
+                com o módulo de elasticidade do concreto à compressão.
         TODO implementar para barras"""
         n = dados.num_elementos()
-        tensoes = np.zeros(n)
-        epsilons = Estrutura.deformacoes_elementos(dados, u)
-        # Matriz constitutiva elástica.
-        material = MaterialIsotropico(1, 0.3)
-        d = material.matriz_constitutiva()
-        e_aco = 20
+        tensoes = np.zeros((n, 3))
+        deformacoes = Estrutura.deformacoes_elementos(dados, u)
 
+        # Matriz constitutiva elástica.
         for i in range(n):
-            if len(dados.elementos[i]) > 2:
-                # Tensões no sistema global.
-                sx, sy, txy = d @ epsilons[i]
-                # Tensões principais
-                p1 = (sx + sy) / 2
-                p2 = np.sqrt(((sx + sy) / 2) ** 2 + txy ** 2)
-                s1 = p1 + p2
-                s2 = p1 - p2
-                tensoes[i] = s1 if abs(s1) >= abs(s2) else s2
+            if (dados.tipo_concreto == 0) or (tensoes_ant is None):
+                tensoes[i] = dados.concreto.matriz_constitutiva_isotropico() @ deformacoes[i]
             else:
-                tensoes[i] = e_aco * epsilons[i]
+                tensoes[i] = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i],
+                                                                                        deformacoes[i]) @ deformacoes[i]
+        return tensoes
+
+    @staticmethod
+    def maior_tensao_principal_elementos(dados: Dados, u: np.ndarray, tensoes: Optional[np.ndarray] = None):
+        """Retorna um vetor contendo as tensões principais de maiores módulos em cada elementos.
+        Retorna uma tensão por elemento."""
+        if tensoes is None:
+            tensoes = Estrutura.tensoes_elementos(dados, u, tensoes)
+
+        for i in range(len(tensoes)):
+            sx, sy, txy = tensoes[i]
+            # Tensões principais
+            p1 = (sx + sy) / 2
+            p2 = np.sqrt(((sx + sy) / 2) ** 2 + txy ** 2)
+            s1 = p1 + p2
+            s2 = p1 - p2
+            tensoes[i] = s1 if abs(s1) >= abs(s2) else s2
 
         return tensoes
