@@ -3,8 +3,10 @@ from loguru import logger
 from julia import Main
 from scipy.spatial import KDTree
 from typing import Tuple, List, Optional
+from otm.mef.materiais import Concreto
 from otm.dados import Dados
 from otm.mef.estrutura import Estrutura
+from math import radians, degrees
 
 
 class OC:
@@ -34,6 +36,8 @@ class OC:
     TECNICA_OTM_EP_HEAVISIDE = [2, 4]
     # Valor mínimo que as variáveis de projeto podem assumir.
     X_MIN = 1e-4
+    # Convergência da análise estrutural.
+    ANGULO_MEDIO_MIN = radians(0.01)
 
     def __init__(self, dados: Dados, rho_inicial: float = 0.5, p: float = 3, rho_min: float = 1e-3,
                  rmin: float = 0, tecnica_otimizacao: int = 0):
@@ -79,9 +83,48 @@ class OC:
         """Retorna o volume inicial da estrutura (volume de material que será distribuído)."""
         return np.sum(self.rho_inicial * self.dados.volumes_elementos_solidos)
 
-    def deslocamentos_nodais(self) -> np.ndarray:
-        """Retorna os deslocamentos nodais em função das variáveis de projeto."""
-        return self.julia.eval(f'deslocamentos(kelems, dados)')
+    def angulos_rotacao_sistema_principal(self, deformacoes: np.ndarray):
+        """Retorna os ângulos de rotação das deformações de cada elemento dos eixos globais para os
+        eixos principais. São considerados apenas os elementos cujas densidade não são nulas."""
+        # Todo atualizar para barras.
+        return np.array([Concreto.angulo_rotacao(*deformacoes[i]) for i in range(len(deformacoes)) if self.rho[i] > 0])
+
+    def deslocamentos_nodais(self, tensoes_ant=None) -> np.ndarray:
+        """Retorna os deslocamentos nodais em função das variáveis de projeto. Se o concreto
+        utilizado for ortotrópico, o processo é convergido em função das tensões."""
+        self.kelems = Estrutura.matrizes_rigidez_elementos_2(self.dados)
+        u = None
+
+        if self.dados.tipo_concreto == 0:
+            self.julia.kelems = self.atualizar_matrizes_rigidez()
+            return self.julia.eval(f'deslocamentos(kelems, dados)')
+        elif self.dados.tipo_concreto == 1:
+            # A convergência do processo de análise em função das tensões ocorre quando a média
+            # dos ângulos de rotação para as tensões principais é menor que 0.01°.
+            angulo_medio = 100
+
+            self.julia.kelems = self.atualizar_matrizes_rigidez()
+            u = self.julia.eval(f'deslocamentos(kelems, dados)')
+
+            tensoes = tensoes_ant.copy()
+            deformacoes = Estrutura.deformacoes_elementos(self.dados, u)
+            c = 0
+            while (abs(angulo_medio) >= OC.ANGULO_MEDIO_MIN) and (c <= 10):
+                c += 1
+
+                self.kelems = Estrutura.matrizes_rigidez_elementos_2(self.dados, tensoes, deformacoes)
+                self.julia.kelems = self.atualizar_matrizes_rigidez()
+
+                angulos_rot = self.angulos_rotacao_sistema_principal(deformacoes)
+                angulo_medio = degrees(abs(sum(angulos_rot) / len(angulos_rot)))
+
+                u = self.julia.eval(f'deslocamentos(kelems, dados)')
+
+                tensoes = Estrutura.tensoes_elementos(self.dados, u, tensoes)
+                deformacoes = Estrutura.deformacoes_elementos(self.dados, u)
+
+                logger.info(f'Ângulo médio de rotação: {angulo_medio}°')
+        return u
 
     def carregar_interface_julia(self):
         """Faz o carregamento dos dados necessários para a utilização da interface com a linguagem Julia."""
@@ -382,12 +425,8 @@ class OC:
         erro_di = 100  # Erro devido ao percentual de densidades intermediárias.
         # Percentual de densidadaes intermediárias inicial.
         di_ant = 100
-        # Tensões iniciais nos elementos.
-        # TODO adaptar para adicionar as barras
-        if self.dados.tipo_concreto == 0:
-            tensoes_ant = None
-        else:
-            tensoes_ant = Estrutura.tensoes_elementos(self.dados, u_ant)
+        # Tensões nos elementos.
+        tensoes_ant = Estrutura.tensoes_elementos(self.dados, u_ant)
 
         def otimizar_p_beta_fixos(p, beta):
             """Otimiza as variáveis de projeto para um valor fixo de `p` e `beta`. Este processo é
@@ -408,22 +447,17 @@ class OC:
                 it += 1
                 # As densidades relativas dos elementos são densidades nodais apenas em otimização sem
                 # esquema de projeção. Essa otimização é feita com `tecnica_otimizacao = 0` apenas.
-                self.kelems = Estrutura.matrizes_rigidez_elementos_2(self.dados, tensoes_ant)
 
                 if self.tecnica_otimizacao != 0:
                     self.julia.rho = self.rho = self.calcular_densidades_elementos(beta)
-                    self.julia.kelems = self.atualizar_matrizes_rigidez()
-                    u = self.deslocamentos_nodais()
+                    u = self.deslocamentos_nodais(tensoes_ant)
                     self.x = self.atualizar_x(u, beta)
                 else:
                     self.julia.rho = self.rho
-                    self.julia.kelems = self.atualizar_matrizes_rigidez()
-                    u = self.deslocamentos_nodais()
+                    u = self.deslocamentos_nodais(tensoes_ant)
                     self.rho = self.atualizar_x(u)
 
-                # Cálculo das novas tensões.
-                if self.dados.tipo_concreto != 0:
-                    tensoes_ant = Estrutura.tensoes_elementos(self.dados, u, tensoes_ant)
+                tensoes_ant = Estrutura.tensoes_elementos(self.dados, u, tensoes_ant)
 
                 # Cálculo dos erros.
                 # Erro entre as duas densidades intermediárias mais atuais.

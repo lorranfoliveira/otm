@@ -75,9 +75,11 @@ class Concreto(Material):
             exy: Tensão cisalhante
         """
         t = self.angulo_rotacao(ex, ey, exy)
-        return np.array([[np.cos(t) ** 2, np.sin(t) ** 2, 2 * np.cos(t) * np.sin(t)],
-                         [np.sin(t) ** 2, np.cos(t) ** 2, -2 * np.cos(t) * np.sin(t)],
-                         [-np.cos(t) * np.sin(t), np.cos(t) * np.sin(t), np.cos(t) ** 2 - np.sin(t) ** 2]])
+        cos = np.cos
+        sin = np.sin
+        return np.array([[cos(t) ** 2, sin(t) ** 2, 2 * cos(t) * sin(t)],
+                         [sin(t) ** 2, cos(t) ** 2, -2 * cos(t) * sin(t)],
+                         [-cos(t) * sin(t), cos(t) * sin(t), cos(t) ** 2 - sin(t) ** 2]])
 
     @staticmethod
     def angulo_rotacao(ex, ey, exy) -> float:
