@@ -66,25 +66,23 @@ class Concreto(Material):
     def __init__(self, ec: float, et: float, nu: float):
         super().__init__(ec, et, nu)
 
-    def matriz_rotacao(self, ex: float, ey: float, exy: float):
+    def matriz_rotacao(self, sx: float, sy: float, txy: float):
         """Retorna a matriz de rotação da matriz constitutiva elástica ortotrópica.
 
         Args:
-            ex: Tensão normal na direção x.
-            ey: Tensão normal na direção y.
-            exy: Tensão cisalhante
+            sx: Tensão normal na direção x.
+            sy: Tensão normal na direção y.
+            txy: Tensão cisalhante
         """
-        t = self.angulo_rotacao(ex, ey, exy)
-        cos = np.cos
-        sin = np.sin
-        return np.array([[cos(t) ** 2, sin(t) ** 2, 2 * cos(t) * sin(t)],
-                         [sin(t) ** 2, cos(t) ** 2, -2 * cos(t) * sin(t)],
-                         [-cos(t) * sin(t), cos(t) * sin(t), cos(t) ** 2 - sin(t) ** 2]])
+        t = self.angulo_rotacao(sx, sy, txy)
+        return np.array([[np.cos(t) ** 2, np.sin(t) ** 2, np.sin(t) * np.cos(t)],
+                         [np.sin(t) ** 2, np.cos(t) ** 2, -np.sin(t) * np.cos(t)],
+                         [-2 * np.sin(t) * np.cos(t), 2 * np.sin(t) * np.cos(t), np.cos(t) ** 2 - np.sin(t) ** 2]])
 
     @staticmethod
-    def angulo_rotacao(ex, ey, exy) -> float:
+    def angulo_rotacao(sx, sy, txy) -> float:
         """Retorna o ângulo de inclinação das sx e sy em relação ao eixo das tensões principais."""
-        return np.arctan(exy / (ex - ey)) / 2
+        return np.arctan((sx - sy) / (2 * txy)) / 2
 
     def matriz_constitutiva(self) -> np.ndarray:
         """Retorna a matriz constitutiva elástica nas direções dos eixos x e y."""
@@ -98,7 +96,7 @@ class Concreto(Material):
 
         return (1 / (1 - nu_ef ** 2)) * np.array([[e_1, e_12, 0],
                                                   [e_12, e_2, 0],
-                                                  [0, 0, 0.25 * (e_1 + e_2 - 2 * e_12)]])
+                                                  [0, 0, (1 / 4) * (e_1 + e_2 - 2 * e_12)]])
 
     def matriz_constitutiva_ortotropica(self, s1, s2) -> np.ndarray:
         """Retorna a matriz constitutiva elástica nas direções dos eixos x e y.
@@ -131,12 +129,10 @@ class Concreto(Material):
                                                   [e_12, e_2, 0],
                                                   [0, 0, 0.25 * (e_1 + e_2 - 2 * e_12)]])
 
-    def matriz_constitutiva_ortotropica_rotacionada(self, tensoes, deformacoes) -> np.ndarray:
+    def matriz_constitutiva_ortotropica_rotacionada(self, tensoes) -> np.ndarray:
         """Retorna a matriz constitutiva elástica rotacionada para os eixos principais."""
-        sx, sy, txy = tensoes
-        ex, ey, gxy = deformacoes
-        r = self.matriz_rotacao(ex, ey, gxy)
-        d = self.matriz_constitutiva_ortotropica(*self.tensoes_principais_elemento(sx, sy, txy))
+        r = self.matriz_rotacao(*tensoes)
+        d = self.matriz_constitutiva_ortotropica(*self.tensoes_principais_elemento(*tensoes))
 
         return r.T @ d @ r
 
@@ -153,7 +149,7 @@ class Concreto(Material):
     def tensoes_principais_elemento(sx, sy, txy) -> np.ndarray:
         """Retorna as tensões principais de um elemento."""
         p1 = (sx + sy) / 2
-        p2 = np.sqrt(((sx + sy) / 2) ** 2 + txy ** 2)
+        p2 = np.sqrt(((sx - sy) / 2) ** 2 + txy ** 2)
         s1 = p1 + p2
         s2 = p1 - p2
 

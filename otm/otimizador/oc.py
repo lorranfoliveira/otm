@@ -83,11 +83,11 @@ class OC:
         """Retorna o volume inicial da estrutura (volume de material que será distribuído)."""
         return np.sum(self.rho_inicial * self.dados.volumes_elementos_solidos)
 
-    def angulos_rotacao_sistema_principal(self, deformacoes: np.ndarray):
+    def angulos_rotacao_sistema_principal(self, tensoes: np.ndarray):
         """Retorna os ângulos de rotação das deformações de cada elemento dos eixos globais para os
         eixos principais. São considerados apenas os elementos cujas densidade não são nulas."""
         # Todo atualizar para barras.
-        return np.array([Concreto.angulo_rotacao(*deformacoes[i]) for i in range(len(deformacoes)) if self.rho[i] > 0])
+        return np.array([Concreto.angulo_rotacao(*tensoes[i]) for i in range(len(tensoes)) if self.rho[i] > 0])
 
     def deslocamentos_nodais(self, tensoes_ant=None) -> np.ndarray:
         """Retorna os deslocamentos nodais em função das variáveis de projeto. Se o concreto
@@ -107,21 +107,19 @@ class OC:
             u = self.julia.eval(f'deslocamentos(kelems, dados)')
 
             tensoes = tensoes_ant.copy()
-            deformacoes = Estrutura.deformacoes_elementos(self.dados, u)
             c = 0
-            while (abs(angulo_medio) >= OC.ANGULO_MEDIO_MIN) and (c <= 10):
+            while (abs(angulo_medio) >= OC.ANGULO_MEDIO_MIN) and (c <= 5):
                 c += 1
 
-                self.kelems = Estrutura.matrizes_rigidez_elementos_2(self.dados, tensoes, deformacoes)
+                self.kelems = Estrutura.matrizes_rigidez_elementos_2(self.dados, tensoes)
                 self.julia.kelems = self.atualizar_matrizes_rigidez()
 
-                angulos_rot = self.angulos_rotacao_sistema_principal(deformacoes)
-                angulo_medio = degrees(abs(sum(angulos_rot) / len(angulos_rot)))
+                angulos_rot = list(map(degrees, self.angulos_rotacao_sistema_principal(tensoes)))
+                angulo_medio = abs(sum(angulos_rot) / len(angulos_rot))
 
                 u = self.julia.eval(f'deslocamentos(kelems, dados)')
 
                 tensoes = Estrutura.tensoes_elementos(self.dados, u, tensoes)
-                deformacoes = Estrutura.deformacoes_elementos(self.dados, u)
 
                 logger.info(f'Ângulo médio de rotação: {angulo_medio}°')
         return u

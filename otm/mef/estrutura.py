@@ -186,12 +186,10 @@ class Estrutura:
         return kels
 
     @staticmethod
-    def matrizes_rigidez_elementos_2(dados: Dados, tensoes: Optional[np.ndarray] = None,
-                                     deformacoes: Optional[np.ndarray] = None) -> List[np.ndarray]:
+    def matrizes_rigidez_elementos_2(dados: Dados, tensoes: Optional[np.ndarray] = None) -> List[np.ndarray]:
         """Atualiza as matrizes de rigidez dos elementos em função das tensões atuantes em cada um.
 
         Args:
-            deformacoes:
             dados:
             tensoes: Tensões atuantes nos elementos.
         """
@@ -204,10 +202,10 @@ class Estrutura:
             n = len(dados.elementos[i])
             kel = np.zeros((2 * n, 2 * n))
             # Matriz constitutiva elástica.
-            if (dados.tipo_concreto == 0) or (tensoes is None) or (deformacoes is None):
+            if (dados.tipo_concreto == 0) or (tensoes is None):
                 d = dados.concreto.matriz_constitutiva_isotropico()
             else:
-                d = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes[i], deformacoes[i])
+                d = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes[i])
             # Iteração sobre os pontos de integração de cada elemento.
             for j in range(len(mb_pesos[i])):
                 # Matriz cinemática nodal do elemento no ponto de integração j.
@@ -302,7 +300,7 @@ class Estrutura:
         return u
 
     @staticmethod
-    def deformacoes_elementos(dados: Dados, u: np.ndarray, deformacoes_principais=True) -> np.ndarray:
+    def deformacoes_elementos(dados: Dados, u: np.ndarray) -> np.ndarray:
         """Retorna um vetor contendo as deformações dos elementos finitos.
         Para os elementos poligonais, as deformações são calculadas em seus centroides."""
         defs = []
@@ -311,19 +309,13 @@ class Estrutura:
             # TODO implementar para elementos de barra
             if len(dados.elementos[i]) > 2:
                 # Deformações no sistema global.
-                defs_glob = dados.matrizes_b_centroide[i] @ u[dados.graus_liberdade_elementos[i]]
-                if not deformacoes_principais:
-                    defs.append(defs_glob)
-                else:
-                    # Matriz de rotação.
-                    r = dados.concreto.matriz_rotacao(*defs_glob)
-                    defs.append(r @ defs_glob)
+                defs.append(dados.matrizes_b_centroide[i] @ u[dados.graus_liberdade_elementos[i]])
 
         return defs
 
     @staticmethod
     def tensoes_elementos(dados: Dados, u: np.ndarray, tensoes_ant=None) -> np.ndarray:
-        """Retorna um vetor com as tensões principais de maior módulo que atuam nos centroides dos elementos
+        """Retorna um vetor com as tensões no sistema global que atuam no centroide dos elementos
         poligonais.
 
         Args:
@@ -335,18 +327,13 @@ class Estrutura:
         n = dados.num_elementos()
         tensoes = np.zeros((n, 3))
         # Deformações no sistema global.
-        defs_globais = Estrutura.deformacoes_elementos(dados, u, False)
-        # Deformação no sistema principal de deformações.
-        defs_princ = Estrutura.deformacoes_elementos(dados, u, True)
-
+        deformacoes = Estrutura.deformacoes_elementos(dados, u)
         # Matriz constitutiva elástica.
         for i in range(n):
             if (dados.tipo_concreto == 0) or (tensoes_ant is None):
-                tensoes[i] = dados.concreto.matriz_constitutiva_isotropico() @ defs_globais[i]
+                tensoes[i] = dados.concreto.matriz_constitutiva_isotropico() @ deformacoes[i]
             else:
-
-                tensoes[i] = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i],
-                                                                                        defs_globais[i]) @ defs_princ[i]
+                tensoes[i] = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i]) @ deformacoes[i]
         return tensoes
 
     @staticmethod
