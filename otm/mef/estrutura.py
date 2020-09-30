@@ -130,7 +130,7 @@ class Estrutura:
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
 
-        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados, None)
+        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados)
         julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
         julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
         julia.apoios = self.dados.apoios + 1
@@ -191,9 +191,9 @@ class Estrutura:
         """Atualiza as matrizes de rigidez dos elementos em função das tensões atuantes em cada um.
 
         Args:
-            deformacoes:
             dados:
             tensoes: Tensões atuantes nos elementos.
+            deformacoes:
         """
         # Matrizes b e pesos.
         mb_pesos = dados.matrizes_b_pontos_integracao
@@ -204,7 +204,7 @@ class Estrutura:
             n = len(dados.elementos[i])
             kel = np.zeros((2 * n, 2 * n))
             # Matriz constitutiva elástica.
-            if (dados.tipo_concreto == 0) or (tensoes is None) or (deformacoes is None):
+            if (dados.tipo_concreto == 0) or (tensoes is None):
                 d = dados.concreto.matriz_constitutiva_isotropico()
             else:
                 d = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes[i], deformacoes[i])
@@ -287,7 +287,7 @@ class Estrutura:
         # Interface Julia
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
-        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados, None)
+        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados)
         julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
         julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
         julia.apoios = self.dados.apoios + 1
@@ -310,13 +310,14 @@ class Estrutura:
         for i in range(dados.num_elementos()):
             # TODO implementar para elementos de barra
             if len(dados.elementos[i]) > 2:
+                # Deformações no sistema global.
                 defs.append(dados.matrizes_b_centroide[i] @ u[dados.graus_liberdade_elementos[i]])
 
         return defs
 
     @staticmethod
     def tensoes_elementos(dados: Dados, u: np.ndarray, tensoes_ant=None) -> np.ndarray:
-        """Retorna um vetor com as tensões principais de maior módulo que atuam nos centroides dos elementos
+        """Retorna um vetor com as tensões no sistema global que atuam no centroide dos elementos
         poligonais.
 
         Args:
@@ -327,8 +328,8 @@ class Estrutura:
         TODO implementar para barras"""
         n = dados.num_elementos()
         tensoes = np.zeros((n, 3))
+        # Deformações no sistema global.
         deformacoes = Estrutura.deformacoes_elementos(dados, u)
-
         # Matriz constitutiva elástica.
         for i in range(n):
             if (dados.tipo_concreto == 0) or (tensoes_ant is None):
