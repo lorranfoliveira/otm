@@ -130,7 +130,7 @@ class Estrutura:
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
 
-        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados, None)
+        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados)
         julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
         julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
         julia.apoios = self.dados.apoios + 1
@@ -186,12 +186,14 @@ class Estrutura:
         return kels
 
     @staticmethod
-    def matrizes_rigidez_elementos_2(dados: Dados, tensoes: Optional[np.ndarray] = None) -> List[np.ndarray]:
+    def matrizes_rigidez_elementos_2(dados: Dados, tensoes: Optional[np.ndarray] = None,
+                                     deformacoes: Optional[np.ndarray] = None) -> List[np.ndarray]:
         """Atualiza as matrizes de rigidez dos elementos em função das tensões atuantes em cada um.
 
         Args:
             dados:
             tensoes: Tensões atuantes nos elementos.
+            deformacoes:
         """
         # Matrizes b e pesos.
         mb_pesos = dados.matrizes_b_pontos_integracao
@@ -205,7 +207,7 @@ class Estrutura:
             if (dados.tipo_concreto == 0) or (tensoes is None):
                 d = dados.concreto.matriz_constitutiva_isotropico()
             else:
-                d = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes[i])
+                d = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes[i], deformacoes[i])
             # Iteração sobre os pontos de integração de cada elemento.
             for j in range(len(mb_pesos[i])):
                 # Matriz cinemática nodal do elemento no ponto de integração j.
@@ -285,7 +287,7 @@ class Estrutura:
         # Interface Julia
         julia = Main
         julia.eval('include("julia_core/Deslocamentos.jl")')
-        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados, None)
+        julia.kelems = self.matrizes_rigidez_elementos_2(self.dados)
         julia.gls_elementos = [i + 1 for i in self.dados.graus_liberdade_elementos]
         julia.gls_estrutura = [i + 1 if i != -1 else i for i in self.dados.graus_liberdade_estrutura]
         julia.apoios = self.dados.apoios + 1
@@ -333,7 +335,8 @@ class Estrutura:
             if (dados.tipo_concreto == 0) or (tensoes_ant is None):
                 tensoes[i] = dados.concreto.matriz_constitutiva_isotropico() @ deformacoes[i]
             else:
-                tensoes[i] = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i]) @ deformacoes[i]
+                tensoes[i] = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i],
+                                                                                        deformacoes[i]) @ deformacoes[i]
         return tensoes
 
     @staticmethod

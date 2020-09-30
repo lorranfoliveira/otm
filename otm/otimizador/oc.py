@@ -37,7 +37,7 @@ class OC:
     # Valor mínimo que as variáveis de projeto podem assumir.
     X_MIN = 1e-4
     # Convergência da análise estrutural.
-    ANGULO_MEDIO_MIN = radians(0.01)
+    DIFERENCA_MIN_ANGULO_MEDIO = 0.01
 
     def __init__(self, dados: Dados, rho_inicial: float = 0.5, p: float = 3, rho_min: float = 1e-3,
                  rmin: float = 0, tecnica_otimizacao: int = 0):
@@ -83,11 +83,11 @@ class OC:
         """Retorna o volume inicial da estrutura (volume de material que será distribuído)."""
         return np.sum(self.rho_inicial * self.dados.volumes_elementos_solidos)
 
-    def angulos_rotacao_sistema_principal(self, tensoes: np.ndarray):
+    def angulos_rotacao_sistema_principal(self, deformacoes: np.ndarray):
         """Retorna os ângulos de rotação das deformações de cada elemento dos eixos globais para os
         eixos principais. São considerados apenas os elementos cujas densidade não são nulas."""
         # Todo atualizar para barras.
-        return np.array([Concreto.angulo_rotacao(*tensoes[i]) for i in range(len(tensoes)) if self.rho[i] > 0])
+        return np.array([Concreto.angulo_rotacao(*deformacoes[i]) for i in range(len(deformacoes)) if self.rho[i] > 0])
 
     def deslocamentos_nodais(self, tensoes_ant=None) -> np.ndarray:
         """Retorna os deslocamentos nodais em função das variáveis de projeto. Se o concreto
@@ -101,27 +101,33 @@ class OC:
         elif self.dados.tipo_concreto == 1:
             # A convergência do processo de análise em função das tensões ocorre quando a média
             # dos ângulos de rotação para as tensões principais é menor que 0.01°.
+            # Ângulo médio anterior
             angulo_medio = 100
+            diferenca_angulos_medios = 100
 
             self.julia.kelems = self.atualizar_matrizes_rigidez()
             u = self.julia.eval(f'deslocamentos(kelems, dados)')
 
             tensoes = tensoes_ant.copy()
+            deformacoes = Estrutura.deformacoes_elementos(self.dados, u)
             c = 0
-            while (abs(angulo_medio) >= OC.ANGULO_MEDIO_MIN) and (c <= 5):
+            while (diferenca_angulos_medios >= OC.DIFERENCA_MIN_ANGULO_MEDIO) and (c <= 20):
                 c += 1
 
-                self.kelems = Estrutura.matrizes_rigidez_elementos_2(self.dados, tensoes)
+                self.kelems = Estrutura.matrizes_rigidez_elementos_2(self.dados, tensoes, deformacoes)
                 self.julia.kelems = self.atualizar_matrizes_rigidez()
 
-                angulos_rot = list(map(degrees, self.angulos_rotacao_sistema_principal(tensoes)))
-                angulo_medio = abs(sum(angulos_rot) / len(angulos_rot))
+                angulos_rot = list(map(lambda x: degrees(abs(x)), self.angulos_rotacao_sistema_principal(deformacoes)))
+                angulo_medio_ant = angulo_medio
+                angulo_medio = sum(angulos_rot) / len(angulos_rot)
+                diferenca_angulos_medios = abs(angulo_medio - angulo_medio_ant)
 
                 u = self.julia.eval(f'deslocamentos(kelems, dados)')
 
                 tensoes = Estrutura.tensoes_elementos(self.dados, u, tensoes)
+                deformacoes = Estrutura.deformacoes_elementos(self.dados, u)
 
-                logger.info(f'Ângulo médio de rotação: {angulo_medio}°')
+                logger.info(f'c: {c}\t dθ: {diferenca_angulos_medios:.4f}°')
         return u
 
     def carregar_interface_julia(self):

@@ -7,12 +7,12 @@ from otm.dados import Dados
 
 
 def analisar_estrutura(dados):
-    r1 = [4, 34, 35, 121, 122, 215, 441, 442, 832, 1771, 2075, 2076, 2081, 2089, 2090, 2091, 2092, 2093, 3797, 3836,
-          3837, 3857, 3858, 3862, 3863, 5111, 5112, 5122, 5725, 6685, 6686, 6697, 6698, 6713, 6714, 6715, 6716, 6717,
-          7110, 8244, 8957, 8961, 8962, 9384, 9388, 9389]
+    r1 = [4, 36, 37, 41, 44, 180, 181, 195, 196, 197, 822, 823, 827, 828, 846, 926, 2200, 2201, 2212, 2222, 2274, 2275,
+          2301, 3817, 3820, 3935, 3936, 5699, 5700, 5741, 5742, 5854, 5855, 5856, 5857, 5900, 5901, 7292, 7293, 7297,
+          7298, 7446, 7447, 8391, 8395, 8396, 9078, 9403, 9404]
 
     apoios = {i: (1, 1) for i in r1}
-    forcas = {5: (0, -1)}
+    forcas = {424: (0, -1)}
 
     est = otm.Estrutura(dados, espessura=1, dict_cargas=forcas, dict_apoios=apoios)
     est.salvar_dados_estrutura()
@@ -27,13 +27,13 @@ dados = Dados(pathlib.Path(__file__).parent.joinpath('Cantilever.zip'), concreto
 # otm.GeradorMalha.exibir_malha(arq, False, 0.25)
 
 # analisar_estrutura(dados)
-# plot = Plot(dados)
+plot = Plot(dados)
 # plot.plotar_estrutura_deformada(0.1)
 
-rmin = 2
-x_ini = 0.5
-otimizador = OC(dados, rho_inicial=x_ini, p=5, rmin=rmin, tecnica_otimizacao=0)
-otimizador.otimizar_estrutura(passo_p=1)
+# rmin = 2
+# x_ini = 0.5
+# otimizador = OC(dados, rho_inicial=x_ini, p=5, rmin=rmin, tecnica_otimizacao=0)
+# otimizador.otimizar_estrutura(passo_p=1)
 # plot.plotar_malha(True)
-# plot.plotar_estrutura_otimizada(0)
+plot.plotar_estrutura_otimizada(0)
 # plot.plotar_tensoes_estrutura()
