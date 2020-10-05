@@ -14,13 +14,6 @@ function corrigir_graus_lib(x)
 end
 
 """
-Retorna as matrizes de rigidez dos elementos com a aplicação do modelo SIMP.
-"""
-function matrizes_elementos_simp(x, p, kelems) 
-    [x[i]^p * kelems[i] for i in range(1, stop=length(x))]
-end
-
-"""
 Faz a montagem da matriz de rigidez da estrutura. Se retornar vetores for true, retorna 
 os três vetores que compõem a matriz esparsa. Caso contrário, retorna a matriz esparsa.
 No caso da saída com vetores, o retorno é feito com uma lista com linhas, colunas e termos, 
@@ -115,10 +108,4 @@ function deslocamentos(kelems, dados)
     u[gls_livres] = u1
 
     return u
-end
-
-"""Calcula os deslocamentos nodais da estrutura considerando o modelo SIMP"""
-function deslocamentos_simp(x, p, dados::Dict)
-    kelems_ef = matrizes_elementos_simp(x, p, dados[ctes[1]])
-    return deslocamentos(kelems_ef, dados) 
 end

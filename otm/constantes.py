@@ -15,6 +15,8 @@ ARQUIVOS_DADOS_ZIP = {0: f'{_prefixos_chave[0]}_elementos.npz',
                       11: f'{_prefixos_chave[1]}_vetor_reverse_cuthill_mckee.npy',
                       12: f'{_prefixos_chave[1]}_dados_entrada_txt.txt',
                       17: f'{_prefixos_chave[1]}_deslocamentos_estrutura_original.npy',
+                      18: f'{_prefixos_chave[1]}_matrizes_cinematicas_nodais_origem.npz',
+                      19: f'{_prefixos_chave[1]}_matrizes_cinematicas_por_ponto_integracao',
                       # Otimização.
                       13: f'{_prefixos_chave[2]}_pesos_nos.npz',
                       # Resultados.

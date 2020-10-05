@@ -6,6 +6,8 @@ import zipfile
 from shapely.wkb import loads
 from otm.constantes import ARQUIVOS_DADOS_ZIP
 from loguru import logger
+from otm.mef.materiais import Concreto
+import shelve
 import os
 from otm.mef.elementos import ElementoPoligonal
 
@@ -21,13 +23,19 @@ class Dados:
     IDS_DADOS_OTIMIZACAO = [2]
     IDS_DADOS_RESULTADOS = [14, 15]
 
-    def __init__(self, arquivo: pathlib.Path):
+    def __init__(self, arquivo: pathlib.Path, concreto: Concreto, tipo_concreto=0):
         """Construtor.
 
         Args:
             arquivo: Diretório do arquivo `.zip` do problema.
+            concreto:
+            tipo_concreto: Se o tipo do concreto for 0, será utilizado o modelo isotrópico. Se for 1, será
+                utilizado o modelo ortotrópico.
+        TODO introduzir o aço como material.
         """
         self.arquivo = arquivo
+        self.concreto = concreto
+        self.tipo_concreto = tipo_concreto
 
         # Dados da malha.
         self._elementos: Optional[np.ndarray] = None
@@ -43,6 +51,8 @@ class Dados:
         self._volumes_elementos_solidos: Optional[np.ndarray] = None
         self._graus_liberdade_estrutura: Optional[np.ndarray] = None
         self._rcm: Optional[np.ndarray] = None
+        self._matrizes_b_centroide: Optional[List[np.ndarray]] = None
+        self._matrizes_b_pontos_integracao: Optional[List[list]] = None
 
         # Dados da otimização.
         self._pesos_esquema_projecao: Optional[List[np.array]] = None
@@ -94,11 +104,42 @@ class Dados:
         return self._apoios
 
     @property
-    def k_elems(self) -> List[np.ndarray]:
+    def kelems(self) -> List[np.ndarray]:
         """Lista com a matriz de rigidez de todos os elementos finitos sólidos."""
         if self._k_elems is None:
             self._k_elems = self.ler_arquivo_entrada_dados_numpy(7)
         return self._k_elems
+
+    @property
+    def matrizes_b_centroide(self):
+        """Retorna as matrizes cinemáticas nodais calculadas com as coordenadas do centroide dos elementos"""
+        if self._matrizes_b_centroide is None:
+            self._matrizes_b_centroide = self.ler_arquivo_entrada_dados_numpy(18)
+        return self._matrizes_b_centroide
+
+    @property
+    def matrizes_b_pontos_integracao(self) -> List[list]:
+        """Lista que contém as matrizes B e o produto entre o peso, a espessura e o jacobiano de cada elemento.
+        Cada elemento é representado por uma lista contendo as lista que representam os valores para cada ponto
+        de integração."""
+        # Arquivo a ser lido.
+        if self._matrizes_b_pontos_integracao is None:
+            arq_1 = f'{ARQUIVOS_DADOS_ZIP[19]}.dat'
+            arq_2 = f'{ARQUIVOS_DADOS_ZIP[19]}.dir'
+            with zipfile.ZipFile(self.arquivo, 'r') as arq_zip:
+                arq_zip.extract(arq_1, str(self.arquivo.parent))
+                arq_zip.extract(arq_2, str(self.arquivo.parent))
+
+            with shelve.open(ARQUIVOS_DADOS_ZIP[19]) as arq_dat:
+                self._matrizes_b_pontos_integracao = arq_dat['0'].copy()
+
+            try:
+                os.remove(str(self.arquivo.parent.joinpath(arq_1)))
+                os.remove(str(self.arquivo.parent.joinpath(arq_2)))
+            except PermissionError as erro:
+                logger.warning(erro)
+
+        return self._matrizes_b_pontos_integracao
 
     @property
     def volumes_elementos_solidos(self) -> np.ndarray:

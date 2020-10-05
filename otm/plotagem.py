@@ -29,6 +29,9 @@ class Plot:
             num_lados: Número de lados que possui o elemento isoparamétrico.
             id_no: Identificação do nó de referência onde a função de forma valerá 1.
         """
+        plt.rcParams['pdf.fonttype'] = 42
+        plt.rcParams['font.family'] = 'Calibri'
+
         elem = ElementoPoligonalIsoparametrico(num_lados)
         func_symb = elem.funcoes_forma()[id_no]
         func_lamb = lambdify(func_symb.free_symbols, func_symb, 'numpy')
@@ -97,8 +100,6 @@ class Plot:
         logger.info('Criando o desenho da malha final')
 
         # Plotagem.
-        plt.rcParams['pdf.fonttype'] = 42
-        plt.rcParams['font.family'] = 'Calibri'
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
         win.window.state('zoomed')
@@ -221,9 +222,6 @@ class Plot:
         rho_final = self.dados.rhos_iteracao_final()
         results_gerais_finais = self.dados.rhos_iteracao_final()
 
-        plt.rcParams['pdf.fonttype'] = 42
-        plt.rcParams['font.family'] = 'Calibri'
-
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
         win.window.state('zoomed')
@@ -285,4 +283,51 @@ class Plot:
                 raise ValueError(f'A técnica de otimização "{tecnica_otimizacao}" não é válida!')
 
         plt.title(f'{tecnica_otm}     {els}     {vf}     {di}    {rmin}')
+        plt.show()
+
+    def plotar_tensoes_estrutura(self, tipo_grafico=0):
+        """Exibe a malha final gerada. cmad jet ou binary.
+
+        Args:
+            tipo_grafico: Tipo de gráfico em que as tensões serão plotadas. 0 para plotar tensões com
+                valores intermediários; 1 para plotar tensões de tração e compressão com valores fixos
+                (gráfico com apenas duas cores).
+        """
+        logger.info('Criando o desenho da malha final')
+
+        # Resultados finais
+        tensoes = Estrutura.tensoes_elementos(self.dados, self.dados.deslocamentos_estrutura_original)
+        max_tens_abs = np.max(np.abs(tensoes))
+
+        def normalizar_tensao(x):
+            """Função interna que normaliza as tensões dos elementos na estrutura para um intervalo
+            entre 0 e 1."""
+            nonlocal max_tens_abs, tipo_grafico
+            if tipo_grafico == 0:
+                return x / (2 * max_tens_abs) + 0.5
+            else:
+                return 0.0 if (x < 0) else 1.0
+
+        fig, ax = plt.subplots()
+        win = plt.get_current_fig_manager()
+        win.window.state('zoomed')
+        ax.axis('equal')
+
+        xmin, ymin, xmax, ymax = self.dados.poligono_dominio_estendido.bounds
+        dx = xmax - xmin
+        dy = ymax - ymin
+        plt.xlim(xmin - 0.1 * dx, xmax + 0.1 * dx)
+        plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
+
+        elementos_poli = []
+        for j, el in enumerate(self.dados.elementos):
+            elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
+                                                  facecolor=cm.seismic(normalizar_tensao(tensoes[j]))))
+
+        ax.add_collection(PatchCollection(elementos_poli, match_original=True))
+        # ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
+        plt.axis('off')
+        plt.grid(b=None)
+
+        plt.title(f'Tensões na estrutura')
         plt.show()
