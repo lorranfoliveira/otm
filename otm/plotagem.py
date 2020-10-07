@@ -112,19 +112,18 @@ class Plot:
         plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
 
         elementos_poli = []
-        # elementos_barra = []
+        elementos_barra = []
         for el in self.dados.elementos:
             if len(el) == 2:
-                pass
-                # verts = [nos[el[0]], nos[el[1]]]
-                # codes = [Path.MOVETO, Path.LINETO]
-                # elementos_barra.append(Path(verts, codes))
+                verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
+                codes = [path.Path.MOVETO, path.Path.LINETO]
+                elementos_barra.append(patches.PathPatch(path.Path(verts, codes), linewidth=0.7, edgecolor='red'))
             elif len(el) > 2:
                 elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0.5, facecolor='None',
                                                       edgecolor='black'))
 
         ax.add_collection(PatchCollection(elementos_poli, match_original=True))
-        # ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
+        ax.add_collection(PatchCollection(elementos_barra, match_original=True))
 
         # Enumerar os pontos
         if exibir_numeracao_nos:

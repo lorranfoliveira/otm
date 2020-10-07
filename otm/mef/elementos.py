@@ -1,17 +1,17 @@
 import numpy as np
-from otm.mef.materiais import Material, Concreto
+from otm.mef.materiais import Material, Concreto, Aco
 import shapely.geometry as sh_geo
-from typing import List, Optional
+from typing import List, Optional, Union
 import symengine
 from loguru import logger
 
-__all__ = ['Elemento', 'BaseElementoPoligonal', 'ElementoPoligonalIsoparametrico', 'ElementoPoligonal']
+__all__ = ['Elemento', 'BaseElementoPoligonal', 'ElementoPoligonalIsoparametrico', 'ElementoPoligonal', 'ElementoBarra']
 
 
 class Elemento:
     """Classe abstrata que implementa as propriedades em comum dos elementos finitos."""
 
-    def __init__(self, nos: np.ndarray, material: Concreto):
+    def __init__(self, nos: np.ndarray, material: Optional[Union[Concreto, Aco]]):
         """Construtor.
 
         Args:
@@ -25,6 +25,17 @@ class Elemento:
     def num_nos(self) -> int:
         """Retorna o número de nós que compõem o elemento."""
         return self.nos.shape[0]
+
+    def matriz_rigidez(self) -> np.ndarray:
+        pass
+
+    @staticmethod
+    def id_no_para_grau_liberdade(id_no) -> list:
+        """Calcula os graus de liberdade do elemento em função da numeração de um nó."""
+        return [2 * id_no, 2 * id_no + 1]
+
+    def graus_liberdade(self):
+        pass
 
 
 class BaseElementoPoligonal(Elemento):
@@ -228,11 +239,6 @@ class ElementoPoligonal(BaseElementoPoligonal):
         self.espessura = espessura
         self.id_nos = id_nos
 
-    @staticmethod
-    def id_no_para_grau_liberdade(id_no) -> list:
-        """Calcula os graus de liberdade do elemento em função da numeração de um nó."""
-        return [2 * id_no, 2 * id_no + 1]
-
     def graus_liberdade(self) -> np.ndarray:
         """Retorna os graus de liberdade do elemento considerando todos os graus de liberdade impedidos."""
         gl = []
@@ -342,3 +348,58 @@ class ElementoPoligonal(BaseElementoPoligonal):
         return dados
 
 
+class ElementoBarra(Elemento):
+    """Elemento finito de barra com área da seção transversal unitária."""
+
+    def __init__(self, nos: np.ndarray, material: Aco, id_nos=None):
+        super().__init__(nos, material)
+        self.id_nos = id_nos
+
+    def graus_liberdade(self) -> np.ndarray:
+        """Retorna os graus de liberdade do elemento considerando todos os graus de liberdade impedidos."""
+        gl = []
+        for no in self.id_nos:
+            gls_i = self.id_no_para_grau_liberdade(no)
+            gl += gls_i
+        return np.array(gl, dtype=int)
+
+    def comprimento(self) -> float:
+        """Retorna o comprimento da barra."""
+        return np.linalg.norm(self.nos[1] - self.nos[0])
+
+    def matriz_rigidez_local(self) -> np.ndarray:
+        """Matrizes de rigidez dos elementos considerando a área da seção e o módulo de elasticidade unitários."""
+        c = self.comprimento()
+        ke = np.zeros((4, 4))
+        ke[0, 0] = ke[2, 2] = 1 / c
+        ke[2, 0] = ke[0, 2] = -1 / c
+
+        return ke
+
+    def matriz_rotacao(self) -> np.ndarray:
+        """Retorna a matriz de rotação do elemento."""
+        t = self.angulo_inclinacao()
+        return np.array([[np.cos(t), np.sin(t), 0, 0],
+                         [-np.sin(t), np.cos(t), 0, 0],
+                         [0, 0, np.cos(t), np.sin(t)],
+                         [0, 0, -np.sin(t), np.cos(t)]])
+
+    def angulo_inclinacao(self) -> np.ndarray:
+        """Retorna o ângulo de rotação do elemento."""
+        dx = self.nos[1, 0] - self.nos[0, 0]
+        dy = self.nos[1, 1] - self.nos[0, 1]
+
+        if dx == 0:
+            if dy < 0:
+                termo = -np.inf
+            else:
+                termo = np.inf
+        else:
+            termo = dy / dx
+
+        return np.arctan(termo)
+
+    def matriz_rigidez(self) -> np.ndarray:
+        r = self.matriz_rotacao()
+        ke = self.matriz_rigidez_local()
+        return r @ ke @ r
