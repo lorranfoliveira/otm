@@ -102,7 +102,7 @@ function deslocamentos(kelems, dados)
     end
 
     u1 = u0[rcm_rev]
-    u1 = k \ forcas_com_apoios
+    # u1 = k \ forcas_com_apoios
 
     u = zeros(length(forcas))
     u[gls_livres] = u1
