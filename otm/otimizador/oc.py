@@ -2,11 +2,11 @@ import numpy as np
 from loguru import logger
 from julia import Main
 from scipy.spatial import KDTree
-from typing import Tuple, List, Optional
+from typing import Tuple, List
 from otm.mef.materiais import Concreto
 from otm.dados import Dados
 from otm.mef.estrutura import Estrutura
-from math import radians, degrees
+from math import degrees
 
 
 class OC:
@@ -38,14 +38,19 @@ class OC:
     X_MIN = 1e-4
     # Convergência da análise estrutural.
     DIFERENCA_MIN_ANGULO_MEDIO = 0.01
+    # Fração do volume do material disponível que será inicialmente distribuído para as barras.
+    # Considera-se como volume máximo possível para a estrutura o volume total dos elementos finitos poligonais.
+    FRACAO_VOLUME_INICIAL_BARRAS = 0.1
+    # Fração de volume máxima das barras em relação ao volume total dos elementos poligonais.
+    FRACAO_VOLUME_MAXIMA_BARRAS = 0.2
 
-    def __init__(self, dados: Dados, rho_inicial: float = 0.5, p: float = 3, rho_min: float = 1e-3,
+    def __init__(self, dados: Dados, fracao_volume: float = 0.5, p: float = 3, rho_min: float = 1e-3,
                  rmin: float = 0, tecnica_otimizacao: int = 0):
         """Se rmin == 0, a otimização será feita sem a aplicação do esquema de projeção.
 
         Args:
             dados: Objeto que acesso ao arquivo `.zip` para a leitura e a escrita dos dados do problema.
-            rho_inicial: Densidade intermediária inicial atribuída a todos os elementos.
+            fracao_volume: Densidade intermediária inicial atribuída a todos os elementos.
             p: Coeficiente de penalização do modelo SIMP. O método da continuação ocorre para valores positivos
                 de `p` em um passo a ser especificado no método `otimizar`.
             rho_min: Valor mínimo de densidade intermediária que um elemento pode assumir para que se
@@ -59,7 +64,7 @@ class OC:
                 4 -> Com esquema de projeção Heaviside inverso.
 
         """
-        self.rho_inicial: float = rho_inicial
+        self.fracao_volume: float = fracao_volume
         self.dados = dados
         self.p = p
         self.rho_min = rho_min
@@ -68,6 +73,9 @@ class OC:
         self.kelems = None
         self.tensoes_princ = None
 
+        # Properties.
+        self._area_maxima_barras = None
+
         # Interface Julia.
         self.julia = Main
         self.julia.eval('include("julia_core/Deslocamentos.jl")')
@@ -75,24 +83,73 @@ class OC:
         self.carregar_interface_julia()
 
         # Densidades dos nós.
-        self.x: np.ndarray = np.full(self.dados.num_nos(), self.rho_inicial)
+        self.x: np.ndarray = np.full(self.dados.num_nos(), self._rho_inicial())
+        self.x = np.append(self.x, np.full(self.dados.num_elementos_barra,
+                                           self._converter_areas_barras_para_variaveis(self._area_incial_barras())))
         # Densidades dos elementos
-        self.rho: np.ndarray = np.full(self.dados.num_elementos(), self.rho_inicial)
+        self.rho: np.ndarray = np.full(self.dados.num_elementos_poli, self._rho_inicial())
+        self.rho = np.append(self.rho, np.full(self.dados.num_elementos_barra,
+                                               self._converter_areas_barras_para_variaveis(self._area_incial_barras())))
+
+    def _volume_inicial_barras(self) -> float:
+        """Retorna o volume inicial ocupado por todas as barras."""
+        return self.FRACAO_VOLUME_INICIAL_BARRAS * self.volume_estrutura_inicial()
+
+    def _volume_atual_elementos_poligonais(self) -> float:
+        return self.dados.volumes_elementos_solidos @ self.rho[:self.dados.num_elementos_poli:]
+
+    def _volume_atual_estrutura(self) -> float:
+        """Retorna o volume atual da estrutura com base nas variáveis de projeto."""
+        return self._volume_atual_elementos_barra() + self._volume_atual_elementos_poligonais()
+
+    def _volume_atual_elementos_barra(self) -> float:
+        areas_barras = self._converter_variaveis_para_area(self.rho[self.dados.num_elementos_poli::])
+        return areas_barras @ self.dados.comprimentos_barras
+
+    def _comprimento_total_barras(self) -> float:
+        """Retorna a soma dos comprimentos de todas as barras."""
+        return np.sum(self.dados.comprimentos_barras)
+
+    def _area_incial_barras(self) -> float:
+        """Retorna o valor inicial das áreas das barras."""
+        # Comprimento total de todas as barras.
+        return self._volume_inicial_barras() / self._comprimento_total_barras()
+
+    @property
+    def area_maxima_barras(self) -> float:
+        """Retorna o valor máximo de área que as seções transversais das barras podem assumir."""
+        if self._area_maxima_barras is None:
+            vol_max = (self.volume_estrutura_inicial() * self.FRACAO_VOLUME_MAXIMA_BARRAS)
+            self._area_maxima_barras = vol_max / self._comprimento_total_barras()
+        return self._area_maxima_barras
+
+    def _converter_variaveis_para_area(self, x_barras: np.ndarray):
+        """Converte o valor de uma variável (0-1) para a área de uma seção transversal de barra."""
+        return x_barras * self.area_maxima_barras
+
+    def _converter_areas_barras_para_variaveis(self, areas_barras: np.ndarray):
+        """Converte o valor de uma área de seção transversal de barra para uma variável (0-1)."""
+        return areas_barras / self.area_maxima_barras
+
+    def _rho_inicial(self) -> float:
+        """Retorna o valor inicial das densidades relativas dos elementos finitos poligonais."""
+        return self.fracao_volume * (1 - self.FRACAO_VOLUME_INICIAL_BARRAS)
 
     def volume_estrutura_inicial(self) -> float:
         """Retorna o volume inicial da estrutura (volume de material que será distribuído)."""
-        return np.sum(self.rho_inicial * self.dados.volumes_elementos_solidos)
+        return np.sum(self.fracao_volume * self.dados.volumes_elementos_solidos)
 
-    def angulos_rotacao_sistema_principal(self, deformacoes: np.ndarray):
+    @staticmethod
+    def angulos_rotacao_sistema_principal(deformacoes: np.ndarray):
         """Retorna os ângulos de rotação das deformações de cada elemento dos eixos globais para os
-        eixos principais. São considerados apenas os elementos cujas densidade não são nulas."""
-        # Todo atualizar para barras.
-        return np.array([Concreto.angulo_rotacao(*deformacoes[i]) for i in range(len(deformacoes)) if self.rho[i] > 0])
+        eixos principais. São considerados apenas os elementos cujas densidade não são nulas. Os elementos
+        Poligonais"""
+        return np.array([Concreto.angulo_rotacao(*defs) for defs in deformacoes if isinstance(defs, np.ndarray)])
 
     def deslocamentos_nodais(self, tensoes_ant=None) -> np.ndarray:
         """Retorna os deslocamentos nodais em função das variáveis de projeto. Se o concreto
         utilizado for ortotrópico, o processo é convergido em função das tensões."""
-        self.kelems = Estrutura.matrizes_rigidez_elementos_2(self.dados)
+        self.kelems = Estrutura.matrizes_rigidez_elementos_poligonais(self.dados) + self.dados.matrizes_rigidez_barras
         u = None
 
         if self.dados.tipo_concreto == 0:
@@ -114,7 +171,8 @@ class OC:
             while (diferenca_angulos_medios >= OC.DIFERENCA_MIN_ANGULO_MEDIO) and (c <= 20):
                 c += 1
 
-                self.kelems = Estrutura.matrizes_rigidez_elementos_2(self.dados, tensoes, deformacoes)
+                self.kelems = Estrutura.matrizes_rigidez_elementos_poligonais(self.dados, tensoes, deformacoes) + \
+                              Estrutura.matrizes_rigidez_barras_tensoes(self.dados, tensoes)
                 self.julia.kelems = self.atualizar_matrizes_rigidez()
 
                 angulos_rot = list(map(lambda x: degrees(abs(x)), self.angulos_rotacao_sistema_principal(deformacoes)))
@@ -172,7 +230,7 @@ class OC:
                 # Função de projeção inversa.
                 return r / rmin
 
-        num_elems = self.dados.num_elementos()
+        num_elems = self.dados.num_elementos
         # Vetorização da função (para ganho de velocidade de processamento).
         vet_w = np.vectorize(w)
         nos = self.dados.nos
@@ -216,7 +274,7 @@ class OC:
             beta: Coeficiente de regularização da função Heaviside. Quando `beta = 0`, a função de projeção
                 fica linear.
         """
-        num_elems = self.dados.num_elementos()
+        num_elems = self.dados.num_elementos_poli
         rho = np.zeros(num_elems)
         pesos_elems = self.dados.pesos_esquema_projecao
 
@@ -239,10 +297,14 @@ class OC:
         de projeto do problema."""
         # As matrizes kelems estão multiplicadas pelos respectivos rhos.
         gl_elems = self.dados.graus_liberdade_elementos
-        sens = np.zeros(self.dados.num_elementos())
+        sens = np.zeros(self.dados.num_elementos)
+        num_els_poli = self.dados.num_elementos_poli
 
         for i, gl in enumerate(gl_elems):
-            sens[i] = (-self.p * self.rho[i] ** (self.p - 1)) * (u[gl] @ self.kelems[i] @ u[gl])
+            if i < num_els_poli:
+                sens[i] = (-self.p * self.rho[i] ** (self.p - 1)) * (u[gl] @ self.kelems[i] @ u[gl])
+            else:
+                sens[i] = -(u[gl] @ self.kelems[i] @ u[gl]) * self.area_maxima_barras
 
         return sens
 
@@ -327,13 +389,20 @@ class OC:
         References:
             Sigmund (2007): 10.1007/s00158-006-0087-x.
         """
-        return 100 * sum(4 * rho * (1 - rho) for rho in self.rho) / len(self.rho)
+        rhos_poli = self.rho[:self.dados.num_elementos_poli:]
+        return 100 * sum(4 * rho * (1 - rho) for rho in rhos_poli) / len(rhos_poli)
 
     def atualizar_matrizes_rigidez(self) -> List[np.ndarray]:
         """Atualiza as matrizes de rigidez dos elementos em função das tensões atuantes em cada um.
         """
-        # todo modificar para elementos de barra
-        return [(self.rho[i] ** self.p + OC.X_MIN) * self.kelems[i] for i in range(self.dados.num_elementos())]
+        # Atualizar elementos poligonais.
+        kelems = []
+        for i in range(self.dados.num_elementos):
+            if i < self.dados.num_elementos_poli:
+                kelems.append((self.rho[i] ** self.p + OC.X_MIN) * self.kelems[i])
+            else:
+                kelems.append(self._converter_variaveis_para_area(self.rho[i]) * self.kelems[i])
+        return kelems
 
     def atualizar_x(self, u: np.ndarray, beta=0) -> Tuple[np.ndarray, np.ndarray]:
         """Atualiza as variáveis de projeto (densidades nodais ou densidades relativas dos elementos)
@@ -345,15 +414,16 @@ class OC:
         """
         vol_inicial = self.volume_estrutura_inicial()
         # Volume da estrutura em função das densidades correntes para os elementos
-        vols_elems_solidos = self.dados.volumes_elementos_solidos
-        vol_atual = vols_elems_solidos @ self.rho
+        vols_els_poli_solidos = self.dados.volumes_elementos_solidos
+        # Volume atual da estrutura.
+        vol_atual = self._volume_atual_estrutura()
         # Sensibilidades da função objetivo e da restrição de volume
         if self.tecnica_otimizacao != 0:
             sens_fo, sens_vol = self.sensibilidades_esquema_projecao(u, beta)
             x = self.x
         else:
             sens_fo = self.sensibilidades_sem_filtro(u)
-            sens_vol = vols_elems_solidos * self.rho_inicial
+            sens_vol = np.append(vols_els_poli_solidos, self.dados.comprimentos_barras * self.area_maxima_barras)
             x = self.rho
 
         eta = 0.5
@@ -453,7 +523,8 @@ class OC:
                 # esquema de projeção. Essa otimização é feita com `tecnica_otimizacao = 0` apenas.
 
                 if self.tecnica_otimizacao != 0:
-                    self.julia.rho = self.rho = self.calcular_densidades_elementos(beta)
+                    self.rho[:self.dados.num_elementos_poli:] = self.calcular_densidades_elementos(beta)
+                    self.julia.rho = self.rho
                     u = self.deslocamentos_nodais(tensoes_ant)
                     self.x = self.atualizar_x(u, beta)
                 else:
@@ -477,11 +548,10 @@ class OC:
                 u_ant = u.copy()
 
                 # Log da iteração.
-                vols = self.dados.volumes_elementos_solidos
                 # Função objetivo.
                 fo = self.flexibilidade_media(u)
                 # Percentual do volume atual em relação ao volume inicial de material.
-                vol_perc = (self.rho @ vols) / np.sum(vols)
+                vol_perc = self._volume_atual_estrutura() / np.sum(self.dados.volumes_elementos_solidos)
                 logger.info(f'i: {it}-{c}\t '
                             f'p: {p}\t '
                             f'beta: {beta:.2f}\t '
@@ -525,6 +595,7 @@ class OC:
 
         # Continuidade em beta.
         if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
+            # self.p = 3
             # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
             # 1.5 * 1/3 = 0.5.
             beta_i = 1 / 3

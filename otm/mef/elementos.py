@@ -369,12 +369,10 @@ class ElementoBarra(Elemento):
 
     def matriz_rigidez_local(self) -> np.ndarray:
         """Matrizes de rigidez dos elementos considerando a área da seção e o módulo de elasticidade unitários."""
-        c = self.comprimento()
-        ke = np.zeros((4, 4))
-        ke[0, 0] = ke[2, 2] = 1 / c
-        ke[2, 0] = ke[0, 2] = -1 / c
-
-        return ke
+        return np.array([[1, 0, -1, 0],
+                         [0, 0, 0, 0],
+                         [-1, 0, 1, 0],
+                         [0, 0, 0, 0]]) / self.comprimento()
 
     def matriz_rotacao(self) -> np.ndarray:
         """Retorna a matriz de rotação do elemento."""
@@ -402,4 +400,4 @@ class ElementoBarra(Elemento):
     def matriz_rigidez(self) -> np.ndarray:
         r = self.matriz_rotacao()
         ke = self.matriz_rigidez_local()
-        return r @ ke @ r
+        return r.T @ ke @ r

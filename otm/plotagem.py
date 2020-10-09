@@ -160,14 +160,13 @@ class Plot:
 
         elementos_poli_original = []
         elementos_poli_deformado = []
-        # elementos_barra = []
+        elementos_barra = []
         for el in vetor_elementos:
             if len(el) == 2:
-                pass
-                # verts_original = [nos[el[0]], nos[el[1]]]
-                # verts_deformado = [nos_def[el[0]], nos_def[el[1]]]
-                # codes = [Path.MOVETO, Path.LINETO]
-                # elementos_barra.append(Path(verts_original, codes))
+                verts = [nos_def[el[0]], nos_def[el[1]]]
+                codes = [path.Path.MOVETO, path.Path.LINETO]
+                elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
+                                                         linewidth=1, edgecolor='red'))
             elif len(el) > 2:
                 elementos_poli_original.append(patches.Polygon(self.dados.nos[el], linewidth=0.7,
                                                                edgecolor=(0, 0, 0, 0.5), facecolor='None',
@@ -207,13 +206,14 @@ class Plot:
         ax.add_collection(PathCollection(path_apoios, linewidths=2, edgecolors='red'))
         ax.add_collection(PatchCollection(elementos_poli_original, match_original=True))
         ax.add_collection(PatchCollection(elementos_poli_deformado, match_original=True))
+        ax.add_collection(PatchCollection(elementos_barra, match_original=True))
         plt.axis('off')
         plt.grid(b=None)
         plt.title(f'Estrutura original deformada       escala: {escala}')
         plt.show()
 
-    def plotar_estrutura_otimizada(self, tecnica_otimizacao: int, rmin: float = 0,
-                                   tipo_cmap: str = 'jet'):
+    def plotar_estrutura_otimizada(self, tecnica_otimizacao: int, corte_barras: float = 0.1, rmin: float = 0,
+                                   tipo_cmap: str = 'binary'):
         """Exibe a malha final gerada. cmad jet ou binary"""
         logger.info('Criando o desenho da malha final')
 
@@ -233,13 +233,21 @@ class Plot:
         plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
 
         elementos_poli = []
+        elementos_barra = []
         for j, el in enumerate(self.dados.elementos):
-            if tipo_cmap == 'jet':
-                elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
-                                                      facecolor=cm.jet(rho_final[j])))
+            if j < self.dados.num_elementos_poli:
+                if tipo_cmap == 'jet':
+                    elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
+                                                          facecolor=cm.jet(rho_final[j])))
+                else:
+                    elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
+                                                          facecolor=cm.binary(rho_final[j])))
             else:
-                elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
-                                                      facecolor=cm.binary(rho_final[j])))
+                if rho_final[j] >= corte_barras:
+                    verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
+                    codes = [path.Path.MOVETO, path.Path.LINETO]
+                    elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
+                                                             linewidth=rho_final[j], edgecolor='red'))
 
         # Adicionar marcador do diâmetro mínimo dos elementos
         path_diam_verts = [[xmax - rmin * 2 - 0.01 * dx, ymax - 0.01 * dx],
@@ -249,7 +257,7 @@ class Plot:
         ax.add_patch(patches.PathPatch(path_diam, linewidth=2, color='magenta'))
 
         ax.add_collection(PatchCollection(elementos_poli, match_original=True))
-        # ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
+        ax.add_collection(PatchCollection(elementos_barra, match_original=True))
         plt.axis('off')
         plt.grid(b=None)
 

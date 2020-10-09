@@ -229,9 +229,8 @@ class Estrutura:
         kelems = []
         # Variável auxiliar para a captura dos elementos de barra que são posicionados na lista na sequência
         # dos elementos poligonais
-        nel_poli = self.dados.num_elementos_poli
-        for i in range(self.dados.num_elementos_barra):
-            kelems.append(self.elementos[nel_poli + i].matriz_rigidez())
+        for i in range(self.dados.num_elementos_poli, self.dados.num_elementos):
+            kelems.append(self.elementos[i].matriz_rigidez())
         return kelems
 
     @staticmethod
@@ -331,21 +330,34 @@ class Estrutura:
         return u
 
     @staticmethod
-    def deformacoes_elementos(dados: Dados, u: np.ndarray) -> np.ndarray:
+    def deformacoes_elementos(dados: Dados, u: np.ndarray) -> List[Union[np.ndarray, float]]:
         """Retorna um vetor contendo as deformações dos elementos finitos.
         Para os elementos poligonais, as deformações são calculadas em seus centroides."""
         defs = []
+        num_els_poli = dados.num_elementos_poli
 
-        for i in range(dados.num_elementos()):
-            # TODO implementar para elementos de barra
+        for i in range(dados.num_elementos):
+            el = dados.elementos[i]
             if len(dados.elementos[i]) > 2:
                 # Deformações no sistema global.
                 defs.append(dados.matrizes_b_centroide[i] @ u[dados.graus_liberdade_elementos[i]])
+            else:
+                # Deformação de uma barra.
+                gls = dados.graus_liberdade_elementos[i]
+                # Nós originais.
+                nos = dados.nos[el]
+                # Nós deslocados.
+                nos_desloc = nos + u[gls].reshape(2, 2)
+                # Comprimento original.
+                c = dados.comprimentos_barras[i - num_els_poli]
+                # Comprimento deformado.
+                c_def = np.linalg.norm(nos_desloc[1] - nos_desloc[0])
+                defs.append((c_def - c) / c)
 
         return defs
 
     @staticmethod
-    def tensoes_elementos(dados: Dados, u: np.ndarray, tensoes_ant=None) -> np.ndarray:
+    def tensoes_elementos(dados: Dados, u: np.ndarray, tensoes_ant=None) -> List[Union[np.ndarray, float]]:
         """Retorna um vetor com as tensões no sistema global que atuam no centroide dos elementos
         poligonais.
 
@@ -354,17 +366,27 @@ class Estrutura:
             u:
             tensoes_ant: Tensões anteriores. Se as tensões forem None, será utilizado o concreto isotrópico
                 com o módulo de elasticidade do concreto à compressão."""
-        n = dados.num_elementos
-        tensoes = np.zeros((n, 3))
+        num_els_poli = dados.num_elementos_poli
+        tensoes = []
         # Deformações no sistema global.
-        deformacoes = Estrutura.deformacoes_elementos(dados, u)
+        defs = Estrutura.deformacoes_elementos(dados, u)
         # Matriz constitutiva elástica.
-        for i in range(n):
-            if (dados.tipo_concreto == 0) or (tensoes_ant is None):
-                tensoes[i] = dados.concreto.matriz_constitutiva_isotropico() @ deformacoes[i]
+        for i in range(dados.num_elementos):
+            if i < num_els_poli:
+                if (dados.tipo_concreto == 0) or (tensoes_ant is None):
+                    tensoes.append(dados.concreto.matriz_constitutiva_isotropico() @ defs[i])
+                else:
+                    tensoes.append(dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i],
+                                                                                              defs[i]) @ defs[i])
             else:
-                tensoes[i] = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i],
-                                                                                        deformacoes[i]) @ deformacoes[i]
+                if tensoes_ant is None:
+                    tensoes.append(dados.aco.et * defs[i])
+                else:
+                    if tensoes_ant[i] > 0:
+                        tensoes.append(dados.aco.et * defs[i])
+                    else:
+                        tensoes.append(dados.aco.ec * defs[i])
+
         return tensoes
 
     @staticmethod
