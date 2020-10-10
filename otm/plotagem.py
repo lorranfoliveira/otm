@@ -99,6 +99,9 @@ class Plot:
         """
         logger.info('Criando o desenho da malha final')
 
+        plt.rcParams['pdf.fonttype'] = 42
+        plt.rcParams['font.family'] = 'Calibri'
+
         # Plotagem.
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
@@ -216,6 +219,9 @@ class Plot:
                                    tipo_cmap: str = 'binary'):
         """Exibe a malha final gerada. cmad jet ou binary"""
         logger.info('Criando o desenho da malha final')
+
+        plt.rcParams['pdf.fonttype'] = 42
+        plt.rcParams['font.family'] = 'Calibri'
 
         # Resultados finais
         rho_final = self.dados.rhos_iteracao_final()

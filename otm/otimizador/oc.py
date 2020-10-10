@@ -40,9 +40,9 @@ class OC:
     DIFERENCA_MIN_ANGULO_MEDIO = 0.01
     # Fração do volume do material disponível que será inicialmente distribuído para as barras.
     # Considera-se como volume máximo possível para a estrutura o volume total dos elementos finitos poligonais.
-    FRACAO_VOLUME_INICIAL_BARRAS = 0.1
+    FRACAO_VOLUME_INICIAL_BARRAS = 0.01
     # Fração de volume máxima das barras em relação ao volume total dos elementos poligonais.
-    FRACAO_VOLUME_MAXIMA_BARRAS = 0.2
+    FRACAO_VOLUME_MAXIMA_BARRAS = 0.5
 
     def __init__(self, dados: Dados, fracao_volume: float = 0.5, p: float = 3, rho_min: float = 1e-3,
                  rmin: float = 0, tecnica_otimizacao: int = 0):
@@ -347,7 +347,7 @@ class OC:
                     return 1 / 2 * (2 * rho + np.exp(2 * beta * rho) - 1) * np.exp(-beta)
                 else:
                     return 1 / 2 * (
-                        (2 * rho + 2 * np.exp(beta) - 1) * np.exp(2 * beta * rho) - np.exp(2 * beta)) * np.exp(
+                            (2 * rho + 2 * np.exp(beta) - 1) * np.exp(2 * beta * rho) - np.exp(2 * beta)) * np.exp(
                         -2 * beta * rho - beta)
         else:
             raise ValueError(f'O tipo de função Heaviside "{metodo}" não é válido!')
@@ -551,12 +551,17 @@ class OC:
                 # Função objetivo.
                 fo = self.flexibilidade_media(u)
                 # Percentual do volume atual em relação ao volume inicial de material.
+                vol_mat = self.volume_estrutura_inicial()
+                vol_perc_poli = 100 * self._volume_atual_elementos_poligonais() / vol_mat
+                vol_perc_barras = 100 * self._volume_atual_elementos_barra() / vol_mat
                 vol_perc = self._volume_atual_estrutura() / np.sum(self.dados.volumes_elementos_solidos)
                 logger.info(f'i: {it}-{c}\t '
                             f'p: {p}\t '
                             f'beta: {beta:.2f}\t '
                             f'fo: {fo:.2f}\t '
                             f'vol: {vol_perc:.3f}%\t '
+                            f'vol poli: {vol_perc_poli:.3f}%\t'
+                            f'vol barras: {vol_perc_barras:.3f}%\t'
                             f'di: {di:.3f}%\t'
                             f'erro_u: {erro_u:.5f}%\t '
                             f'erro_di: {erro_di:.5f}%\t')
