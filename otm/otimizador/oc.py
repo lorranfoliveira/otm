@@ -347,7 +347,7 @@ class OC:
                     return 1 / 2 * (2 * rho + np.exp(2 * beta * rho) - 1) * np.exp(-beta)
                 else:
                     return 1 / 2 * (
-                            (2 * rho + 2 * np.exp(beta) - 1) * np.exp(2 * beta * rho) - np.exp(2 * beta)) * np.exp(
+                        (2 * rho + 2 * np.exp(beta) - 1) * np.exp(2 * beta * rho) - np.exp(2 * beta)) * np.exp(
                         -2 * beta * rho - beta)
         else:
             raise ValueError(f'O tipo de função Heaviside "{metodo}" não é válido!')
@@ -360,15 +360,18 @@ class OC:
             sens_fo: Vetor contendo as sensibilidades da função objetivo.
             sens_vol: Vetor contendo as sensibilidades da restrição de volume.
         """
+        num_nos = self.dados.num_nos()
+        n = num_nos + self.dados.num_elementos_barra
         # Sensibilidade da função objetivo
-        sens_fo = np.zeros(self.dados.num_nos())
+        sens_fo = np.zeros(n)
         # Sensibilidade da restrição de volume
-        sens_vol = np.zeros(self.dados.num_nos())
+        sens_vol = np.zeros(n)
         vols = self.dados.volumes_elementos_solidos
         gl_elems = self.dados.graus_liberdade_elementos
         pesos_elems = self.dados.pesos_esquema_projecao
 
-        for i, gl in enumerate(gl_elems):
+        for i in range(self.dados.num_elementos_poli):
+            gl = gl_elems[i]
             # Parcela da sensibilidade devida à densidade do elemento
             sens_el = (-self.p * self.rho[i] ** (self.p - 1)) * (u[gl] @ self.kelems[i] @ u[gl])
             # Desmembramento da matriz de pesos
@@ -380,6 +383,15 @@ class OC:
             diff_rhoe_rhon = self.heaviside(mi, beta, OC.METODO_HEAVISIDE, True) * pesos_i / soma_pesos
             sens_fo[ids_nos] += sens_el * diff_rhoe_rhon
             sens_vol[ids_nos] += vols[i] * diff_rhoe_rhon
+
+        for i in range(self.dados.num_elementos_barra):
+            # Referência às variáveis de projeto.
+            j = i + num_nos
+            # Referência aos elementos.
+            k = i + self.dados.num_elementos_poli
+            gl = gl_elems[k]
+            sens_fo[j] = -(u[gl] @ self.kelems[k] @ u[gl]) * self.area_maxima_barras
+            sens_vol[j] = self.dados.comprimentos_barras[i] * self.area_maxima_barras
 
         return sens_fo, sens_vol
 
@@ -524,6 +536,8 @@ class OC:
 
                 if self.tecnica_otimizacao != 0:
                     self.rho[:self.dados.num_elementos_poli:] = self.calcular_densidades_elementos(beta)
+                    if self.dados.num_elementos_barra > 0:
+                        self.rho[self.dados.num_elementos_poli::] = self.x[self.dados.num_nos()::]
                     self.julia.rho = self.rho
                     u = self.deslocamentos_nodais(tensoes_ant)
                     self.x = self.atualizar_x(u, beta)

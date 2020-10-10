@@ -30,11 +30,11 @@ dados = Dados(pathlib.Path(__file__).parent.joinpath('MBB_mod.zip'), concreto, a
 # reg, verts = malha.criar_malha(3, 100)
 # otm.GeradorMalha.exibir_malha(arq, False, 0.25)
 
-analisar_estrutura(dados)
+# analisar_estrutura(dados)
 
-rmin = 1
+rmin = 20
 x_ini = 0.5
-otimizador = OC(dados, fracao_volume=x_ini, p=5, rmin=rmin, tecnica_otimizacao=0)
+otimizador = OC(dados, fracao_volume=x_ini, p=5, rmin=rmin, tecnica_otimizacao=1)
 otimizador.otimizar_estrutura(passo_p=0.5)
 
 # plot = Plot(dados)

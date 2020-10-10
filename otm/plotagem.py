@@ -253,7 +253,7 @@ class Plot:
                     verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
                     codes = [path.Path.MOVETO, path.Path.LINETO]
                     elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
-                                                             linewidth=rho_final[j], edgecolor='red'))
+                                                             linewidth=2 * rho_final[j], edgecolor='red'))
 
         # Adicionar marcador do diâmetro mínimo dos elementos
         path_diam_verts = [[xmax - rmin * 2 - 0.01 * dx, ymax - 0.01 * dx],
