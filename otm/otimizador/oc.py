@@ -2,7 +2,7 @@ import numpy as np
 from loguru import logger
 from julia import Main
 from scipy.spatial import KDTree
-from typing import Tuple, List
+from typing import Union, List
 from otm.mef.materiais import Concreto
 from otm.dados import Dados
 from otm.mef.estrutura import Estrutura
@@ -40,7 +40,7 @@ class OC:
     DIFERENCA_MIN_ANGULO_MEDIO = 0.01
     # Fração do volume do material disponível que será inicialmente distribuído para as barras.
     # Considera-se como volume máximo possível para a estrutura o volume total dos elementos finitos poligonais.
-    FRACAO_VOLUME_INICIAL_BARRAS = 0.01
+    FRACAO_VOLUME_INICIAL_BARRAS = 0.1
     # Fração de volume máxima das barras em relação ao volume total dos elementos poligonais.
     FRACAO_VOLUME_MAXIMA_BARRAS = 0.5
 
@@ -100,15 +100,23 @@ class OC:
 
     def _volume_atual_estrutura(self) -> float:
         """Retorna o volume atual da estrutura com base nas variáveis de projeto."""
-        return self._volume_atual_elementos_barra() + self._volume_atual_elementos_poligonais()
+        vol_barras = self._volume_atual_elementos_barra()
+        return vol_barras + self._volume_atual_elementos_poligonais()
 
     def _volume_atual_elementos_barra(self) -> float:
         areas_barras = self._converter_variaveis_para_area(self.rho[self.dados.num_elementos_poli::])
         return areas_barras @ self.dados.comprimentos_barras
 
+    def _volume_estrutura_x(self, x):
+        """Retorna o volume da estrutura em função das variáveis de projeto."""
+        vol_poli = x[:self.dados.num_elementos_poli:] @ self.dados.volumes_elementos_solidos
+        areas_bars = self._converter_variaveis_para_area(x[self.dados.num_elementos_poli::])
+        vol_bars = areas_bars @ self.dados.comprimentos_barras
+        return vol_poli + vol_bars
+
     def _comprimento_total_barras(self) -> float:
         """Retorna a soma dos comprimentos de todas as barras."""
-        return np.sum(self.dados.comprimentos_barras)
+        return sum(self.dados.comprimentos_barras)
 
     def _area_incial_barras(self) -> float:
         """Retorna o valor inicial das áreas das barras."""
@@ -127,7 +135,7 @@ class OC:
         """Converte o valor de uma variável (0-1) para a área de uma seção transversal de barra."""
         return x_barras * self.area_maxima_barras
 
-    def _converter_areas_barras_para_variaveis(self, areas_barras: np.ndarray):
+    def _converter_areas_barras_para_variaveis(self, areas_barras: Union[float, np.ndarray]):
         """Converte o valor de uma área de seção transversal de barra para uma variável (0-1)."""
         return areas_barras / self.area_maxima_barras
 
@@ -137,7 +145,7 @@ class OC:
 
     def volume_estrutura_inicial(self) -> float:
         """Retorna o volume inicial da estrutura (volume de material que será distribuído)."""
-        return np.sum(self.fracao_volume * self.dados.volumes_elementos_solidos)
+        return self.fracao_volume * sum(self.dados.volumes_elementos_solidos)
 
     @staticmethod
     def angulos_rotacao_sistema_principal(deformacoes: np.ndarray):
@@ -416,7 +424,7 @@ class OC:
                 kelems.append(self._converter_variaveis_para_area(self.rho[i]) * self.kelems[i])
         return kelems
 
-    def atualizar_x(self, u: np.ndarray, beta=0) -> Tuple[np.ndarray, np.ndarray]:
+    def atualizar_x(self, u: np.ndarray, beta=0) -> np.ndarray:
         """Atualiza as variáveis de projeto (densidades nodais ou densidades relativas dos elementos)
         utilizando o OC.
 
@@ -427,8 +435,7 @@ class OC:
         vol_inicial = self.volume_estrutura_inicial()
         # Volume da estrutura em função das densidades correntes para os elementos
         vols_els_poli_solidos = self.dados.volumes_elementos_solidos
-        # Volume atual da estrutura.
-        vol_atual = self._volume_atual_estrutura()
+
         # Sensibilidades da função objetivo e da restrição de volume
         if self.tecnica_otimizacao != 0:
             sens_fo, sens_vol = self.sensibilidades_esquema_projecao(u, beta)
@@ -466,7 +473,10 @@ class OC:
                     x_novo[i] = t3[i]
 
             # Restrição de volume
-            if ((vol_atual - vol_inicial) + sens_vol @ (x_novo - x)) > 0:
+            # Volume do x_novo.
+
+            # if ((vol_atual - vol_inicial) + sens_vol @ (x_novo - x)) > 0:
+            if (self._volume_estrutura_x(x_novo) - vol_inicial) > 0:
                 l1 = lmid
             else:
                 l2 = lmid

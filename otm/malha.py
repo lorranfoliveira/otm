@@ -683,8 +683,8 @@ class Malha:
 
         # Adição dos elementos da treliça hiperconectada
         elementos_barra, vertices_final = self._criar_trelica_hiperconectada(poligono, elementos_final,
-                                                                             vertices_final, d=10, nivel_conect=2,
-                                                                             espacamento=8)
+                                                                             vertices_final, d=5, nivel_conect=2,
+                                                                             espacamento=21)
 
         elementos_final += elementos_barra
         logger.success(f'Malha finalizada com {len(elementos_final)} elementos, {len(vertices_final)} nós e '
