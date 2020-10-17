@@ -169,7 +169,7 @@ class Plot:
                 verts = [nos_def[el[0]], nos_def[el[1]]]
                 codes = [path.Path.MOVETO, path.Path.LINETO]
                 elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
-                                                         linewidth=1, edgecolor='red'))
+                                                         linewidth=1, edgecolor='purple'))
             elif len(el) > 2:
                 elementos_poli_original.append(patches.Polygon(self.dados.nos[el], linewidth=0.7,
                                                                edgecolor=(0, 0, 0, 0.5), facecolor='None',

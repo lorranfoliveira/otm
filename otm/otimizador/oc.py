@@ -20,7 +20,7 @@ class OC:
     # Máximo valor que pode ser assumido por beta.
     BETA_MAX = 150
     # Quantidade mínima de iterações.
-    NUM_MIN_ITERS = 15
+    NUM_MIN_ITERS = 10
     # Quantidade máxima de iterações.
     NUM_MAX_ITERS = 50
     # Técnicas de otimização.
@@ -40,7 +40,7 @@ class OC:
     DIFERENCA_MIN_ANGULO_MEDIO = 0.01
     # Fração do volume do material disponível que será inicialmente distribuído para as barras.
     # Considera-se como volume máximo possível para a estrutura o volume total dos elementos finitos poligonais.
-    FRACAO_VOLUME_INICIAL_BARRAS = 0.1
+    FRACAO_VOLUME_INICIAL_BARRAS = 0.5
     # Fração de volume máxima das barras em relação ao volume total dos elementos poligonais.
     FRACAO_VOLUME_MAXIMA_BARRAS = 0.5
 
@@ -157,7 +157,12 @@ class OC:
     def deslocamentos_nodais(self, tensoes_ant=None) -> np.ndarray:
         """Retorna os deslocamentos nodais em função das variáveis de projeto. Se o concreto
         utilizado for ortotrópico, o processo é convergido em função das tensões."""
-        self.kelems = Estrutura.matrizes_rigidez_elementos_poligonais(self.dados) + self.dados.matrizes_rigidez_barras
+        kes_poli = Estrutura.matrizes_rigidez_elementos_poligonais(self.dados)
+        kes_poli = [self.dados.concreto.ec * ke for ke in kes_poli]
+        kes_bars = self.dados.matrizes_rigidez_barras
+        kes_bars = [self.dados.aco.et * ke for ke in kes_bars]
+        # self.kelems = Estrutura.matrizes_rigidez_elementos_poligonais(self.dados) + self.dados.matrizes_rigidez_barras
+        self.kelems = kes_poli + kes_bars
         u = None
 
         if self.dados.tipo_concreto == 0:
@@ -433,8 +438,6 @@ class OC:
             beta: Coeficiente de regularização da função Heaviside.
         """
         vol_inicial = self.volume_estrutura_inicial()
-        # Volume da estrutura em função das densidades correntes para os elementos
-        vols_els_poli_solidos = self.dados.volumes_elementos_solidos
 
         # Sensibilidades da função objetivo e da restrição de volume
         if self.tecnica_otimizacao != 0:
@@ -442,7 +445,8 @@ class OC:
             x = self.x
         else:
             sens_fo = self.sensibilidades_sem_filtro(u)
-            sens_vol = np.append(vols_els_poli_solidos, self.dados.comprimentos_barras * self.area_maxima_barras)
+            sens_vol = np.append(self.dados.volumes_elementos_solidos,
+                                 self.dados.comprimentos_barras * self.area_maxima_barras)
             x = self.rho
 
         eta = 0.5

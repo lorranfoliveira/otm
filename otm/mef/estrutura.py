@@ -170,7 +170,7 @@ class Estrutura:
         """Retorna um vetor com os volumes dos elementos finitos."""
         return np.array([self.espessura * el.poligono().area for el in self.elementos[:self.dados.num_elementos_poli:]])
 
-    def comprimentos_barras(self):
+    def comprimentos_barras(self) -> np.ndarray:
         """Retorna um vetor que contém os comprimentos dos elementos de barra."""
         return np.array([e.comprimento() for e in self.elementos[self.dados.num_elementos_poli::]])
 
