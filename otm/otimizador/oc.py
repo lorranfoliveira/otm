@@ -35,17 +35,17 @@ class OC:
     TECNICA_OTM_EP_LINEAR = [1, 3]
     TECNICA_OTM_EP_HEAVISIDE = [2, 4]
     # Valor mínimo que as variáveis de projeto podem assumir.
-    X_MIN = 1e-4
+    X_MIN = 1e-9
     # Convergência da análise estrutural.
     DIFERENCA_MIN_ANGULO_MEDIO = 0.01
     # Fração do volume do material disponível que será inicialmente distribuído para as barras.
     # Considera-se como volume máximo possível para a estrutura o volume total dos elementos finitos poligonais.
-    FRACAO_VOLUME_INICIAL_BARRAS = 0.5
+    FRACAO_VOLUME_INICIAL_BARRAS = 0.05
     # Fração de volume máxima das barras em relação ao volume total dos elementos poligonais.
     FRACAO_VOLUME_MAXIMA_BARRAS = 0.5
 
-    def __init__(self, dados: Dados, fracao_volume: float = 0.5, p: float = 3, rho_min: float = 1e-3,
-                 rmin: float = 0, tecnica_otimizacao: int = 0):
+    def __init__(self, dados: Dados, fracao_volume: float = 0.5, p: float = 3, rmin: float = 0,
+                 tecnica_otimizacao: int = 0):
         """Se rmin == 0, a otimização será feita sem a aplicação do esquema de projeção.
 
         Args:
@@ -67,7 +67,6 @@ class OC:
         self.fracao_volume: float = fracao_volume
         self.dados = dados
         self.p = p
-        self.rho_min = rho_min
         self.rmin = rmin
         self.tecnica_otimizacao = tecnica_otimizacao
         self.kelems = None
@@ -84,16 +83,21 @@ class OC:
 
         # Densidades dos nós.
         self.x: np.ndarray = np.full(self.dados.num_nos(), self._rho_inicial())
-        self.x = np.append(self.x, np.full(self.dados.num_elementos_barra,
-                                           self._converter_areas_barras_para_variaveis(self._area_incial_barras())))
+
+        if self.dados.tem_barras():
+            self.x = np.append(self.x, np.full(self.dados.num_elementos_barra,
+                                               self._converter_areas_barras_para_variaveis(self._area_incial_barras())))
         # Densidades dos elementos
         self.rho: np.ndarray = np.full(self.dados.num_elementos_poli, self._rho_inicial())
-        self.rho = np.append(self.rho, np.full(self.dados.num_elementos_barra,
-                                               self._converter_areas_barras_para_variaveis(self._area_incial_barras())))
+
+        if self.dados.tem_barras():
+            self.rho = np.append(self.rho, np.full(self.dados.num_elementos_barra,
+                                                   self._converter_areas_barras_para_variaveis(
+                                                       self._area_incial_barras())))
 
     def _volume_inicial_barras(self) -> float:
         """Retorna o volume inicial ocupado por todas as barras."""
-        return self.FRACAO_VOLUME_INICIAL_BARRAS * self.volume_estrutura_inicial()
+        return self.FRACAO_VOLUME_INICIAL_BARRAS * self.volume_total_material()
 
     def _volume_atual_elementos_poligonais(self) -> float:
         return self.dados.volumes_elementos_solidos @ self.rho[:self.dados.num_elementos_poli:]
@@ -104,14 +108,21 @@ class OC:
         return vol_barras + self._volume_atual_elementos_poligonais()
 
     def _volume_atual_elementos_barra(self) -> float:
-        areas_barras = self._converter_variaveis_para_area(self.rho[self.dados.num_elementos_poli::])
-        return areas_barras @ self.dados.comprimentos_barras
+        if self.dados.tem_barras():
+            areas_barras = self._converter_variaveis_para_area(self.rho[self.dados.num_elementos_poli::])
+            return areas_barras @ self.dados.comprimentos_barras
+        else:
+            return 0
 
     def _volume_estrutura_x(self, x):
         """Retorna o volume da estrutura em função das variáveis de projeto."""
         vol_poli = x[:self.dados.num_elementos_poli:] @ self.dados.volumes_elementos_solidos
-        areas_bars = self._converter_variaveis_para_area(x[self.dados.num_elementos_poli::])
-        vol_bars = areas_bars @ self.dados.comprimentos_barras
+
+        if self.dados.tem_barras():
+            areas_bars = self._converter_variaveis_para_area(x[self.dados.num_elementos_poli::])
+            vol_bars = areas_bars @ self.dados.comprimentos_barras
+        else:
+            vol_bars = 0
         return vol_poli + vol_bars
 
     def _comprimento_total_barras(self) -> float:
@@ -127,7 +138,7 @@ class OC:
     def area_maxima_barras(self) -> float:
         """Retorna o valor máximo de área que as seções transversais das barras podem assumir."""
         if self._area_maxima_barras is None:
-            vol_max = (self.volume_estrutura_inicial() * self.FRACAO_VOLUME_MAXIMA_BARRAS)
+            vol_max = (self.volume_total_material() * self.FRACAO_VOLUME_MAXIMA_BARRAS)
             self._area_maxima_barras = vol_max / self._comprimento_total_barras()
         return self._area_maxima_barras
 
@@ -141,9 +152,12 @@ class OC:
 
     def _rho_inicial(self) -> float:
         """Retorna o valor inicial das densidades relativas dos elementos finitos poligonais."""
-        return self.fracao_volume * (1 - self.FRACAO_VOLUME_INICIAL_BARRAS)
+        if self.dados.tem_barras():
+            return self.fracao_volume * (1 - self.FRACAO_VOLUME_INICIAL_BARRAS)
+        else:
+            return self.fracao_volume
 
-    def volume_estrutura_inicial(self) -> float:
+    def volume_total_material(self) -> float:
         """Retorna o volume inicial da estrutura (volume de material que será distribuído)."""
         return self.fracao_volume * sum(self.dados.volumes_elementos_solidos)
 
@@ -178,8 +192,11 @@ class OC:
             self.julia.kelems = self.atualizar_matrizes_rigidez()
             u = self.julia.eval(f'deslocamentos(kelems, dados)')
 
-            tensoes = tensoes_ant.copy()
             deformacoes = Estrutura.deformacoes_elementos(self.dados, u)
+            if tensoes_ant is None:
+                tensoes = Estrutura.tensoes_elementos(self.dados, u)
+            else:
+                tensoes = tensoes_ant.copy()
             c = 0
             while (diferenca_angulos_medios >= OC.DIFERENCA_MIN_ANGULO_MEDIO) and (c <= 20):
                 c += 1
@@ -437,7 +454,7 @@ class OC:
             u: Deslocamentos nodais.
             beta: Coeficiente de regularização da função Heaviside.
         """
-        vol_inicial = self.volume_estrutura_inicial()
+        vol_inicial = self.volume_total_material()
 
         # Sensibilidades da função objetivo e da restrição de volume
         if self.tecnica_otimizacao != 0:
@@ -445,8 +462,10 @@ class OC:
             x = self.x
         else:
             sens_fo = self.sensibilidades_sem_filtro(u)
-            sens_vol = np.append(self.dados.volumes_elementos_solidos,
-                                 self.dados.comprimentos_barras * self.area_maxima_barras)
+            sens_vol = self.dados.volumes_elementos_solidos
+
+            if self.dados.tem_barras():
+                sens_vol = np.append(sens_vol, self.dados.comprimentos_barras * self.area_maxima_barras)
             x = self.rho
 
         eta = 0.5
@@ -526,7 +545,7 @@ class OC:
         # Percentual de densidadaes intermediárias inicial.
         di_ant = 100
         # Tensões nos elementos.
-        tensoes_ant = Estrutura.tensoes_elementos(self.dados, u_ant)
+        tensoes_ant = None
 
         def otimizar_p_beta_fixos(p, beta):
             """Otimiza as variáveis de projeto para um valor fixo de `p` e `beta`. Este processo é
@@ -579,7 +598,7 @@ class OC:
                 # Função objetivo.
                 fo = self.flexibilidade_media(u)
                 # Percentual do volume atual em relação ao volume inicial de material.
-                vol_mat = self.volume_estrutura_inicial()
+                vol_mat = self.volume_total_material()
                 vol_perc_poli = 100 * self._volume_atual_elementos_poligonais() / vol_mat
                 vol_perc_barras = 100 * self._volume_atual_elementos_barra() / vol_mat
                 vol_perc = self._volume_atual_estrutura() / np.sum(self.dados.volumes_elementos_solidos)
@@ -587,7 +606,7 @@ class OC:
                             f'p: {p}\t '
                             f'beta: {beta:.2f}\t '
                             f'fo: {fo:.2f}\t '
-                            f'vol: {vol_perc:.3f}%\t '
+                            f'vol: {vol_perc:.3f}\t '
                             f'vol poli: {vol_perc_poli:.3f}%\t'
                             f'vol barras: {vol_perc_barras:.3f}%\t'
                             f'di: {di:.3f}%\t'

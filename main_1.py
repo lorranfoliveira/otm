@@ -6,35 +6,35 @@ from otm.dados import Dados
 
 
 def analisar_estrutura(dados):
-    r1 = [367, 1154, 1174, 1185, 2610, 2611, 2621, 2622, 3079, 3145, 3161, 4601, 4602, 4625, 4627, 5152, 5153, 5154,
-          5158, 5159, 5162, 5163, 6601, 6605, 6606, 6609, 6614, 6615, 6961, 6962, 7016, 7017, 8174, 8175, 8179, 8180,
-          8181, 8182, 8475, 8491, 9151, 9192, 9193, 9338, 9339, 9348, 9699, 9703, 9704, 9801, 9802]
+    r1 = [432, 435, 1219, 1220, 1231, 1232, 1233, 1248, 1259, 1274, 1275, 1283, 1422, 1423, 2765, 2767, 2771, 2772,
+          2794, 2795, 2806, 2807, 2825, 2848, 2849, 2853, 2854, 2992, 2993, 5287, 5294, 5296, 5297, 5299, 5300, 5400,
+          5411, 5412, 5439, 5440, 5583, 5584, 8585, 8588, 8607, 8608, 8617, 8618, 8619, 8635, 8636, 8662, 8663, 8692,
+          8693, 11716, 11717, 11724, 11725, 11726, 12049, 14942, 16943, 18314, 18315, 18406, 18407]
 
-    r2 = [8455, 5143, 2650, 372]
+    r2 = [8411, 2859, 5410, 3019]
 
     r3 = r1 + r2
 
-    apoios = {**{i: (1, 0) for i in r3}, **{1709: (0, 1)}}
-    forcas = {8455: (0, -1e2)}
+    apoios = {**{i: (1, 0) for i in r3}, **{29: (0, 1)}}
+    forcas = {8411: (0, -100)}
 
-    est = otm.Estrutura(dados, espessura=10, dict_cargas=forcas, dict_apoios=apoios)
+    est = otm.Estrutura(dados, espessura=1, dict_cargas=forcas, dict_apoios=apoios)
     est.salvar_dados_estrutura()
 
 
-concreto = otm.Concreto(2400, 20, 0.2)
+concreto = otm.Concreto(2490, 200, 0.2)
 aco = otm.Aco(0, 20000)
-dados = Dados(pathlib.Path(__file__).parent.joinpath('MBB_5000.zip'), concreto, aco, 1)
+dados = Dados(pathlib.Path(__file__).parent.joinpath('MBB_kenia.zip'), concreto, aco, 1)
 
 # Gerar malha
-# malha = otm.Malha(dados, 5000)
-# reg, verts = malha.criar_malha(3, 500)
-# otm.GeradorMalha.exibir_malha(arq, False, 0.25)
+# malha = otm.Malha(dados, 10000)
+# reg, verts = malha.criar_malha(3, 300)
 
 # analisar_estrutura(dados)
 #
 rmin = 10
-fv = 0.3
-otimizador = OC(dados, fracao_volume=fv, p=3, rmin=rmin, tecnica_otimizacao=0)
+fv = 0.4
+otimizador = OC(dados, fracao_volume=fv, p=5, rmin=rmin, tecnica_otimizacao=0)
 otimizador.otimizar_estrutura(passo_p=1)
 #
 plot = Plot(dados)

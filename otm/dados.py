@@ -141,6 +141,10 @@ class Dados:
             self._k_elems = self.ler_arquivo_entrada_dados_numpy(7)
         return self._k_elems
 
+    def tem_barras(self) -> bool:
+        """Verifica se existem barras no problema."""
+        return self.num_elementos_poli < self.num_elementos
+
     @property
     def matrizes_b_centroide(self):
         """Retorna as matrizes cinemáticas nodais calculadas com as coordenadas do centroide dos elementos"""
