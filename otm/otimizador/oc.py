@@ -455,6 +455,7 @@ class OC:
             beta: Coeficiente de regularização da função Heaviside.
         """
         vol_inicial = self.volume_total_material()
+        vol_atual = self._volume_atual_estrutura()
 
         # Sensibilidades da função objetivo e da restrição de volume
         if self.tecnica_otimizacao != 0:
@@ -498,8 +499,8 @@ class OC:
             # Restrição de volume
             # Volume do x_novo.
 
-            # if ((vol_atual - vol_inicial) + sens_vol @ (x_novo - x)) > 0:
-            if (self._volume_estrutura_x(x_novo) - vol_inicial) > 0:
+            if ((vol_atual - vol_inicial) + sens_vol @ (x_novo - x)) > 0:
+                # if (self._volume_estrutura_x(x_novo) - vol_inicial) > 0:
                 l1 = lmid
             else:
                 l2 = lmid
@@ -569,7 +570,7 @@ class OC:
 
                 if self.tecnica_otimizacao != 0:
                     self.rho[:self.dados.num_elementos_poli:] = self.calcular_densidades_elementos(beta)
-                    if self.dados.num_elementos_barra > 0:
+                    if self.dados.tem_barras():
                         self.rho[self.dados.num_elementos_poli::] = self.x[self.dados.num_nos()::]
                     self.julia.rho = self.rho
                     u = self.deslocamentos_nodais(tensoes_ant)
@@ -647,7 +648,7 @@ class OC:
 
         # Continuidade em beta.
         if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
-            # self.p = 3
+            self.p = 3
             # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
             # 1.5 * 1/3 = 0.5.
             beta_i = 1 / 3

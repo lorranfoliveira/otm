@@ -24,7 +24,7 @@ def analisar_estrutura(dados):
 
 concreto = otm.Concreto(2490, 200, 0.2)
 aco = otm.Aco(0, 20000)
-dados = Dados(pathlib.Path(__file__).parent.joinpath('MBB_kenia.zip'), concreto, aco, 1)
+dados = Dados(pathlib.Path(__file__).parent.joinpath('MBB_kenia_04.zip'), concreto, aco, 1)
 
 # Gerar malha
 # malha = otm.Malha(dados, 10000)
@@ -34,7 +34,7 @@ dados = Dados(pathlib.Path(__file__).parent.joinpath('MBB_kenia.zip'), concreto,
 #
 rmin = 10
 fv = 0.4
-otimizador = OC(dados, fracao_volume=fv, p=5, rmin=rmin, tecnica_otimizacao=0)
+otimizador = OC(dados, fracao_volume=fv, p=5, rmin=rmin, tecnica_otimizacao=4)
 otimizador.otimizar_estrutura(passo_p=1)
 #
 plot = Plot(dados)
