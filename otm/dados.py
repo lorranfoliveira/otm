@@ -6,7 +6,7 @@ import zipfile
 from shapely.wkb import loads
 from otm.constantes import ARQUIVOS_DADOS_ZIP
 from loguru import logger
-from otm.mef.materiais import Concreto
+from otm.mef.materiais import Concreto, Aco
 import shelve
 import os
 from otm.mef.elementos import ElementoPoligonal
@@ -23,7 +23,7 @@ class Dados:
     IDS_DADOS_OTIMIZACAO = [2]
     IDS_DADOS_RESULTADOS = [14, 15]
 
-    def __init__(self, arquivo: pathlib.Path, concreto: Concreto, tipo_concreto=0):
+    def __init__(self, arquivo: pathlib.Path, concreto: Concreto, aco: Optional[Aco] = None, tipo_concreto=0):
         """Construtor.
 
         Args:
@@ -35,12 +35,17 @@ class Dados:
         """
         self.arquivo = arquivo
         self.concreto = concreto
+        self.aco = aco
         self.tipo_concreto = tipo_concreto
 
         # Dados da malha.
         self._elementos: Optional[np.ndarray] = None
         self._nos: Optional[np.ndarray] = None
         self._poligono_dominio_estendido: Optional[Polygon] = None
+        self._num_elementos: Optional[int] = None
+        self._num_elementos_poli: Optional[int] = None
+        self._num_elementos_barra: Optional[int] = None
+        self._comprimentos_barras: Optional[np.ndarray] = None
 
         # Dados da análise.
         self._deslocamentos_estrutura_original: Optional[np.ndarray] = None
@@ -53,6 +58,7 @@ class Dados:
         self._rcm: Optional[np.ndarray] = None
         self._matrizes_b_centroide: Optional[List[np.ndarray]] = None
         self._matrizes_b_pontos_integracao: Optional[List[list]] = None
+        self._matrizes_rigidez_barras: Optional[List[np.ndarray]] = None
 
         # Dados da otimização.
         self._pesos_esquema_projecao: Optional[List[np.array]] = None
@@ -74,6 +80,31 @@ class Dados:
         if self._elementos is None:
             self._elementos = self.ler_arquivo_entrada_dados_numpy(0)
         return self._elementos
+
+    @property
+    def num_elementos_poli(self):
+        if self._num_elementos_poli is None:
+            self._num_elementos_poli = len([e for e in self.elementos if len(e) > 2])
+        return self._num_elementos_poli
+
+    @property
+    def num_elementos_barra(self):
+        if self._num_elementos_barra is None:
+            self._num_elementos_barra = self.num_elementos - self.num_elementos_poli
+        return self._num_elementos_barra
+
+    @property
+    def num_elementos(self) -> int:
+        """Retorna a quantidade de elementos que compõem a malha."""
+        if self._num_elementos is None:
+            self._num_elementos = len(self.elementos)
+        return self._num_elementos
+
+    @property
+    def comprimentos_barras(self):
+        if self._comprimentos_barras is None:
+            self._comprimentos_barras = self.ler_arquivo_entrada_dados_numpy(21)
+        return self._comprimentos_barras
 
     @property
     def nos(self) -> np.ndarray:
@@ -110,6 +141,10 @@ class Dados:
             self._k_elems = self.ler_arquivo_entrada_dados_numpy(7)
         return self._k_elems
 
+    def tem_barras(self) -> bool:
+        """Verifica se existem barras no problema."""
+        return self.num_elementos_poli < self.num_elementos
+
     @property
     def matrizes_b_centroide(self):
         """Retorna as matrizes cinemáticas nodais calculadas com as coordenadas do centroide dos elementos"""
@@ -140,6 +175,12 @@ class Dados:
                 logger.warning(erro)
 
         return self._matrizes_b_pontos_integracao
+
+    @property
+    def matrizes_rigidez_barras(self):
+        if self._matrizes_rigidez_barras is None:
+            self._matrizes_rigidez_barras = self.ler_arquivo_entrada_dados_numpy(20)
+        return self._matrizes_rigidez_barras
 
     @property
     def volumes_elementos_solidos(self) -> np.ndarray:
@@ -338,10 +379,6 @@ class Dados:
     def num_nos(self) -> int:
         """Retorna a quantidade de nós que compõem a malha."""
         return self.nos.shape[0]
-
-    def num_elementos(self) -> int:
-        """Retorna a quantidade de elementos que compõem a malha."""
-        return len(self.elementos)
 
     # endregion
 

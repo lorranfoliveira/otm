@@ -2,38 +2,45 @@ import otm
 import pathlib
 from otm.otimizador.oc import OC
 from otm.plotagem import Plot
-import numpy as np
 from otm.dados import Dados
 
 
 def analisar_estrutura(dados):
-    r1 = [4, 36, 37, 41, 44, 180, 181, 195, 196, 197, 822, 823, 827, 828, 846, 926, 2200, 2201, 2212, 2222, 2274, 2275,
-          2301, 3817, 3820, 3935, 3936, 5699, 5700, 5741, 5742, 5854, 5855, 5856, 5857, 5900, 5901, 7292, 7293, 7297,
-          7298, 7446, 7447, 8391, 8395, 8396, 9078, 9403, 9404]
+    r1 = [432, 435, 1219, 1220, 1231, 1232, 1233, 1248, 1259, 1274, 1275, 1283, 1422, 1423, 2765, 2767, 2771, 2772,
+          2794, 2795, 2806, 2807, 2825, 2848, 2849, 2853, 2854, 2992, 2993, 5287, 5294, 5296, 5297, 5299, 5300, 5400,
+          5411, 5412, 5439, 5440, 5583, 5584, 8585, 8588, 8607, 8608, 8617, 8618, 8619, 8635, 8636, 8662, 8663, 8692,
+          8693, 11716, 11717, 11724, 11725, 11726, 12049, 14942, 16943, 18314, 18315, 18406, 18407]
 
-    apoios = {i: (1, 1) for i in r1}
-    forcas = {424: (0, -1)}
+    r2 = [8411, 2859, 5410, 3019]
+
+    r3 = r1 + r2
+
+    apoios = {**{i: (1, 0) for i in r3}, **{29: (0, 1)}}
+    forcas = {8411: (0, -100)}
 
     est = otm.Estrutura(dados, espessura=1, dict_cargas=forcas, dict_apoios=apoios)
     est.salvar_dados_estrutura()
 
 
-concreto = otm.Concreto(2.4, 0.2, 0.2)
-dados = Dados(pathlib.Path(__file__).parent.joinpath('Cantilever.zip'), concreto, 1)
+concreto = otm.Concreto(2490, 200, 0.2)
+aco = otm.Aco(0, 20000)
+dados = Dados(pathlib.Path(__file__).parent.joinpath('MBB_kenia_04.zip'), concreto, aco, 1)
 
 # Gerar malha
-# malha = otm.Malha(dados, 5000)
-# reg, verts = malha.criar_malha(3, 100)
-# otm.GeradorMalha.exibir_malha(arq, False, 0.25)
+# malha = otm.Malha(dados, 10000)
+# reg, verts = malha.criar_malha(3, 300)
 
 # analisar_estrutura(dados)
+#
+rmin = 10
+fv = 0.4
+otimizador = OC(dados, fracao_volume=fv, p=5, rmin=rmin, tecnica_otimizacao=4)
+otimizador.otimizar_estrutura(passo_p=1)
+#
 plot = Plot(dados)
-# plot.plotar_estrutura_deformada(0.1)
-
-# rmin = 2
-# x_ini = 0.5
-# otimizador = OC(dados, rho_inicial=x_ini, p=5, rmin=rmin, tecnica_otimizacao=0)
-# otimizador.otimizar_estrutura(passo_p=1)
 # plot.plotar_malha(True)
-plot.plotar_estrutura_otimizada(0)
+# plot.plotar_estrutura_deformada(30)
+plot.plotar_estrutura_otimizada(tecnica_otimizacao=0, corte_barras=0)
 # plot.plotar_tensoes_estrutura()
+
+# print(min(dados.deslocamentos_estrutura_original))

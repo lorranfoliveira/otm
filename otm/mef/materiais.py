@@ -1,6 +1,6 @@
 import numpy as np
 
-__all__ = ['Material', 'Concreto']
+__all__ = ['Material', 'Concreto', 'Aco']
 
 E_CONCRETO_COMPRIMIDO = 2.49
 E_CONCRETO_TRACIONADO = 2
@@ -168,3 +168,8 @@ class Concreto(Material):
         # Tensões principais
         s1, s2 = Concreto.tensoes_principais_elemento(sx, sy, txy)
         return s1 if abs(s1) >= abs(s2) else s2
+
+
+class Aco(Material):
+    def __init__(self, ec: float, et: float, nu: float = 0.3):
+        super().__init__(ec, et, nu)

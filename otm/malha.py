@@ -682,12 +682,11 @@ class Malha:
         elementos_final = self.corrigir_sentido_anti_horario_dos_nos_elementos(vertices_final, elementos)
 
         # Adição dos elementos da treliça hiperconectada
-        # elementos_barra, verts_final = self._criar_trelica_hiperconectada(poligono, elementos_final,
-        #                                                                   verts_final, d=1, nivel_conect=3,
-        #                                                                   espacamento=2)
-        #
-        # elementos_final += elementos_barra
+        elementos_barra, vertices_final = self._criar_trelica_hiperconectada(poligono, elementos_final,
+                                                                             vertices_final, d=4, nivel_conect=2,
+                                                                             espacamento=21)
 
+        elementos_final += elementos_barra
         logger.success(f'Malha finalizada com {len(elementos_final)} elementos, {len(vertices_final)} nós e '
                        f'{len(vertices_final) * 2} graus de liberdade')
 
