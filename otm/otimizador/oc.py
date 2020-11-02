@@ -536,6 +536,8 @@ class OC:
         # 5 -> Percentual de densidades intermediárias.
         # 6 -> Erro relacionado aos deslocamentos.
         # 7 -> Erro relacionado ao percentual de densidades intermediárias.
+        # 8 -> Percentual de volume de elementos contínuos.
+        # 9 -> Percentual de volume de elementos de barra.
         resultados_gerais = []
 
         # Último vetor de deslocamentos.
@@ -618,7 +620,8 @@ class OC:
 
                 # Adição dos resultados da iteração aos vetores de resultados.
                 resultados_rho.append(self.rho.copy())
-                resultados_gerais.append([c, p, beta, fo, vol_perc, di, erro_u, erro_di])
+                resultados_gerais.append([c, p, beta, fo, vol_perc, di, erro_u, erro_di, vol_perc_poli,
+                                          vol_perc_barras])
 
                 # Aplicação dos critérios de convergência.
                 # A convergência ocorre apenas pela variação dos deslocamentos nodais quando `beta = 0`.

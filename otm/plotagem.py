@@ -137,6 +137,7 @@ class Plot:
         plt.axis('off')
         plt.grid(b=None)
         plt.show()
+        # plt.savefig('malha.pdf')
 
     def plotar_estrutura_deformada(self, escala=1):
         """Exibe a malha final gerada"""
@@ -225,7 +226,7 @@ class Plot:
 
         # Resultados finais
         rho_final = self.dados.rhos_iteracao_final()
-        results_gerais_finais = self.dados.rhos_iteracao_final()
+        results_gerais_finais = self.dados.resultados_gerais_iteracao_final()
 
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
@@ -240,6 +241,7 @@ class Plot:
 
         elementos_poli = []
         elementos_barra = []
+        x_bar_max = max(rho_final[self.dados.num_elementos_poli::])
         for j, el in enumerate(self.dados.elementos):
             if j < self.dados.num_elementos_poli:
                 if tipo_cmap == 'jet':
@@ -252,8 +254,11 @@ class Plot:
                 if rho_final[j] >= corte_barras:
                     verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
                     codes = [path.Path.MOVETO, path.Path.LINETO]
+
+                    rho = 5 * rho_final[j] / x_bar_max
+                    # rho = 3 if rho_final[j] > 0 else 0
                     elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
-                                                             linewidth=2 * rho_final[j], edgecolor='red'))
+                                                             linewidth=rho, edgecolor='red'))
 
         # Adicionar marcador do diâmetro mínimo dos elementos
         path_diam_verts = [[xmax - rmin * 2 - 0.01 * dx, ymax - 0.01 * dx],
