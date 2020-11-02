@@ -654,18 +654,9 @@ class OC:
             # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
             # 1.5 * 1/3 = 0.5.
             beta_i = 1 / 3
-            for i in range(num_max_iteracoes):
-                dens_i = self.percentual_densidades_intermediarias()
-                if beta_i < OC.BETA_MAX:
-                    if (dens_i >= 5) or (i < 10):
-                        beta_i = min(1.5 * beta_i, OC.BETA_MAX)
-                    elif 1 <= dens_i < 5:
-                        beta_i = min(beta_i + 5, OC.BETA_MAX)
-                    else:
-                        break
-                    otimizar_p_beta_fixos(self.p, beta_i)
-                else:
-                    break
+            while beta_i < OC.BETA_MAX:
+                beta_i = min(1.4 * beta_i, OC.BETA_MAX)
+                otimizar_p_beta_fixos(self.p, beta_i)
 
         # Salvar resultados no arquivo `.zip`.
         self.dados.salvar_arquivo_numpy(np.array(resultados_rho), 14)
