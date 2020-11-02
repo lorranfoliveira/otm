@@ -40,9 +40,7 @@ class OC:
     DIFERENCA_MIN_ANGULO_MEDIO = 0.01
     # Fração do volume do material disponível que será inicialmente distribuído para as barras.
     # Considera-se como volume máximo possível para a estrutura o volume total dos elementos finitos poligonais.
-    FRACAO_VOLUME_INICIAL_BARRAS = 0.05
-    # Fração de volume máxima das barras em relação ao volume total dos elementos poligonais.
-    FRACAO_VOLUME_MAXIMA_BARRAS = 0.5
+    FRACAO_VOLUME_INICIAL_BARRAS = 0.2
 
     def __init__(self, dados: Dados, fracao_volume: float = 0.5, p: float = 3, rmin: float = 0,
                  tecnica_otimizacao: int = 0):
@@ -136,10 +134,14 @@ class OC:
 
     @property
     def area_maxima_barras(self) -> float:
-        """Retorna o valor máximo de área que as seções transversais das barras podem assumir."""
+        """Retorna o valor máximo de área que as seções transversais das barras podem assumir.
+        A área máxima das barras é calculada de forma em que a menor barra consiga absorver tod o volume
+        de material da estrutura."""
         if self._area_maxima_barras is None:
-            vol_max = (self.volume_total_material() * self.FRACAO_VOLUME_MAXIMA_BARRAS)
-            self._area_maxima_barras = vol_max / self._comprimento_total_barras()
+            # vol_max = (self.volume_total_material() * self.FRACAO_VOLUME_MAXIMA_BARRAS)
+            comp_menor_barra = np.min(self.dados.comprimentos_barras)
+            # self._area_maxima_barras = vol_max / self._comprimento_total_barras()
+            self._area_maxima_barras = self.volume_total_material() / comp_menor_barra
         return self._area_maxima_barras
 
     def _converter_variaveis_para_area(self, x_barras: np.ndarray):
