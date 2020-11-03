@@ -509,8 +509,53 @@ class OC:
 
         return x_novo
 
+    def filtro(self, tensoes_ant):
+        u = self.deslocamentos_nodais(tensoes_ant)
+        flex_inicial = self.flexibilidade_media(u)
+        tensoes = tensoes_ant.copy()
+        rho_a = self.rho[self.dados.num_elementos_poli::]
+        k_bars = self.dados.matrizes_rigidez_barras.copy()
+
+        flex_aumento_max = 2
+
+        print(f'Flexibilidade média inicial:{flex_inicial}\n')
+
+        erro = 1
+        # Intervalos de busca
+        a = 0
+        b = max(rho_a)
+        tol = 0.001 * (b - a)
+
+        for i in range(50):
+            erro = abs((b - a) / 2)
+
+            self.dados.matrizes_rigidez_barras = k_bars.copy()
+
+            c = (a + b) / 2
+            indices = np.where(rho_a <= c)[0]
+
+            for j in indices:
+                self.dados.matrizes_rigidez_barras[j] = 1e-12 * self.dados.matrizes_rigidez_barras[j]
+
+            u = self.deslocamentos_nodais(tensoes)
+            flex = self.flexibilidade_media(u)
+            logger.info(f'Corte:{c}\t Flexibilidade média:{flex}\t erro:{erro}')
+            # Número de vezes que a compliance aumentou desde a última iteração.
+            flex_aumento = flex / flex_inicial
+            if (erro <= tol) and (flex_aumento <= flex_aumento_max):
+                self.rho[self.dados.num_elementos_poli + indices] = 0
+                break
+
+            if flex_aumento > flex_aumento_max:
+                b = c
+            else:
+                a = c
+
+            tensoes = Estrutura.tensoes_elementos(self.dados, u, tensoes)
+
     def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50):
         """Aplica o processo de otimização aos dados da estrutura.
+        TODO inserir uma forma mais limpa de zerar as matrizes de rigidez das barras excluídas
 
         Se o passo for -1, apenas um valor de p será rodado
         Args:
@@ -660,6 +705,10 @@ class OC:
             while beta_i < OC.BETA_MAX:
                 beta_i = min(1.4 * beta_i, OC.BETA_MAX)
                 otimizar_p_beta_fixos(self.p, beta_i)
+
+        # Aplicação do filtro para a eliminação de barras pouco influentes
+        self.filtro(tensoes_ant)
+        # otimizar_p_beta_fixos(self.p, 0)
 
         # Salvar resultados no arquivo `.zip`.
         self.dados.salvar_arquivo_numpy(np.array(resultados_rho), 14)
