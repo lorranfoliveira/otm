@@ -81,10 +81,6 @@ Resolve o sistema de equações e retorna os deslocamentos nodais.
 function deslocamentos(kelems, dados)
     k = matriz_rigidez_estrutura(kelems, dados)
 
-    # Aplicação do critério de Thikonov
-    par_lambda = 1e-12
-    k = (k + par_lambda * Diagonal(ones(size(k)[1])))
-
     forcas = dados["forcas"]
     apoios = dados["apoios"]
 

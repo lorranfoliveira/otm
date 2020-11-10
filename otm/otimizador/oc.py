@@ -36,6 +36,7 @@ class OC:
     TECNICA_OTM_EP_HEAVISIDE = [2, 4]
     # Valor mínimo que as variáveis de projeto podem assumir.
     X_MIN = 1e-9
+    # X_MIN = 0
     # Convergência da análise estrutural.
     DIFERENCA_MIN_ANGULO_MEDIO = 0.01
     # Fração do volume do material disponível que será inicialmente distribuído para as barras.
@@ -510,21 +511,22 @@ class OC:
         return x_novo
 
     def filtro(self, tensoes_ant):
+
+        logger.info('Iniciando o a aplicação do filtro...')
+
         u = self.deslocamentos_nodais(tensoes_ant)
         flex_inicial = self.flexibilidade_media(u)
-        tensoes = tensoes_ant.copy()
         rho_a = self.rho[self.dados.num_elementos_poli::]
         k_bars = self.dados.matrizes_rigidez_barras.copy()
 
-        flex_aumento_max = 2
+        flex_aumento_max = 1.1
 
-        print(f'Flexibilidade média inicial:{flex_inicial}\n')
+        logger.info(f'Flexibilidade média inicial:{flex_inicial}\n')
 
-        erro = 1
         # Intervalos de busca
         a = 0
         b = max(rho_a)
-        tol = 0.001 * (b - a)
+        tol = 1e-4 * (b - a)
 
         for i in range(50):
             erro = abs((b - a) / 2)
@@ -535,23 +537,24 @@ class OC:
             indices = np.where(rho_a <= c)[0]
 
             for j in indices:
-                self.dados.matrizes_rigidez_barras[j] = 1e-12 * self.dados.matrizes_rigidez_barras[j]
+                self.dados.matrizes_rigidez_barras[j] = 0 * self.dados.matrizes_rigidez_barras[j]
 
-            u = self.deslocamentos_nodais(tensoes)
+            u = self.deslocamentos_nodais(tensoes_ant)
             flex = self.flexibilidade_media(u)
             logger.info(f'Corte:{c}\t Flexibilidade média:{flex}\t erro:{erro}')
             # Número de vezes que a compliance aumentou desde a última iteração.
             flex_aumento = flex / flex_inicial
             if (erro <= tol) and (flex_aumento <= flex_aumento_max):
                 self.rho[self.dados.num_elementos_poli + indices] = 0
+                self.x[self.dados.num_nos() + indices] = 0
+
+                logger.success('Filtragem finalizada!')
                 break
 
             if flex_aumento > flex_aumento_max:
                 b = c
             else:
                 a = c
-
-            tensoes = Estrutura.tensoes_elementos(self.dados, u, tensoes)
 
     def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50):
         """Aplica o processo de otimização aos dados da estrutura.
@@ -708,7 +711,9 @@ class OC:
 
         # Aplicação do filtro para a eliminação de barras pouco influentes
         self.filtro(tensoes_ant)
-        # otimizar_p_beta_fixos(self.p, 0)
+        # Resetando as tensões
+        tensoes_ant = None
+        otimizar_p_beta_fixos(self.p, 0)
 
         # Salvar resultados no arquivo `.zip`.
         self.dados.salvar_arquivo_numpy(np.array(resultados_rho), 14)
