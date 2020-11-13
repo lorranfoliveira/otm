@@ -38,7 +38,8 @@ class OC:
     X_MIN = 1e-9
     # X_MIN = 0
     # Convergência da análise estrutural.
-    DIFERENCA_MIN_ANGULO_MEDIO = 0.01
+    # DIFERENCA_MIN_ANGULO_MEDIO = 0.01
+    DIFERENCA_MIN_ANGULO_MEDIO = 0.1
     # Fração do volume do material disponível que será inicialmente distribuído para as barras.
     # Considera-se como volume máximo possível para a estrutura o volume total dos elementos finitos poligonais.
     FRACAO_VOLUME_INICIAL_BARRAS = 0.2
@@ -556,7 +557,7 @@ class OC:
             else:
                 a = c
 
-    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50):
+    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50, aplicar_filtro=True):
         """Aplica o processo de otimização aos dados da estrutura.
         TODO inserir uma forma mais limpa de zerar as matrizes de rigidez das barras excluídas
 
@@ -699,6 +700,12 @@ class OC:
         for p_i in ps:
             otimizar_p_beta_fixos(p_i, 0)
 
+        # Aplicação do filtro para a eliminação de barras pouco influentes
+        if aplicar_filtro:
+            self.filtro(tensoes_ant)
+            tensoes_ant = None
+            otimizar_p_beta_fixos(self.p, 0)
+
         # Continuidade em beta.
         if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
             self.p = 3
@@ -709,11 +716,7 @@ class OC:
                 beta_i = min(1.4 * beta_i, OC.BETA_MAX)
                 otimizar_p_beta_fixos(self.p, beta_i)
 
-        # Aplicação do filtro para a eliminação de barras pouco influentes
-        self.filtro(tensoes_ant)
-        # Resetando as tensões
-        tensoes_ant = None
-        otimizar_p_beta_fixos(self.p, 0)
+
 
         # Salvar resultados no arquivo `.zip`.
         self.dados.salvar_arquivo_numpy(np.array(resultados_rho), 14)

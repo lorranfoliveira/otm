@@ -535,7 +535,7 @@ class Malha:
                     if (poli_elem := Polygon([vertices[n] for n in elem])).contains(ponto_gs_geo):
                         # TODO Verificar depois
                         # Modificar apenas pontos
-                        if contorno_sem_buff.distance(ponto_gs_geo) >= 0.9 * d:
+                        if contorno_sem_buff.distance(ponto_gs_geo) >= 0.95 * d:
                             # Ponto do elemento que é mais próximo do ponto da malha da ground structure
                             ponto_prox = nearest_points(MultiPoint(poli_elem.boundary.coords), ponto_gs_geo)[0]
                             # Diferenças em x e em y entre os pontos
@@ -682,11 +682,11 @@ class Malha:
         elementos_final = self.corrigir_sentido_anti_horario_dos_nos_elementos(vertices_final, elementos)
 
         # Adição dos elementos da treliça hiperconectada
-        elementos_barra, vertices_final = self._criar_trelica_hiperconectada(poligono, elementos_final,
-                                                                             vertices_final, d=3, nivel_conect=2,
-                                                                             espacamento=28)
-
-        elementos_final += elementos_barra
+        # elementos_barra, vertices_final = self._criar_trelica_hiperconectada(poligono, elementos_final,
+        #                                                                      vertices_final, d=2, nivel_conect=2,
+        #                                                                      espacamento=13)
+        #
+        # elementos_final += elementos_barra
         logger.success(f'Malha finalizada com {len(elementos_final)} elementos, {len(vertices_final)} nós e '
                        f'{len(vertices_final) * 2} graus de liberdade')
 

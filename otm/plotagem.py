@@ -217,7 +217,7 @@ class Plot:
         plt.show()
 
     def plotar_estrutura_otimizada(self, tecnica_otimizacao: int, corte_barras: float = 0.1, rmin: float = 0,
-                                   tipo_cmap: str = 'binary'):
+                                   tipo_cmap: str = 'binary', visualizar_areas_barras=False):
         """Exibe a malha final gerada. cmad jet ou binary"""
         logger.info('Criando o desenho da malha final')
 
@@ -255,10 +255,34 @@ class Plot:
                     verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
                     codes = [path.Path.MOVETO, path.Path.LINETO]
 
-                    rho = 5 * rho_final[j] / x_bar_max
+                    rho = 10 * rho_final[j] / x_bar_max
                     # rho = 3 if rho_final[j] > 0 else 0
-                    elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
-                                                             linewidth=rho, edgecolor='red'))
+
+                    if rho > 0:
+                        if tipo_cmap == 'jet':
+                            elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
+                                                                     linewidth=rho, edgecolor='black'))
+                        else:
+                            elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
+                                                                     linewidth=rho, edgecolor='red'))
+        # Enumerar os pontos
+        if visualizar_areas_barras:
+            for i in range(self.dados.num_elementos_poli, self.dados.num_elementos):
+                if rho_final[i] > 0:
+                    # Centro da barra
+                    nos_barra_i = self.dados.nos[self.dados.elementos[i]]
+                    c = (nos_barra_i[0] + nos_barra_i[1]) / 2
+
+                    cor = 'white' if tipo_cmap == 'jet' else 'blue'
+                    ax.text(c[0], c[1], f'{rho_final[i] / x_bar_max:.2E}', ha="center", va="center",
+                            size=0.05 * min(dx, dy), color=cor)
+
+        # Desenhar o domínio do desenho
+        # contorno = self.dados.poligono_dominio_estendido.boundary.coords[:]
+        # linhas_cont = []
+        # for lin in contorno:
+        #     linhas_cont.append(patches.PathPatch(path.Path(lin, [path.Path.MOVETO, path.Path.LINETO]),
+        #                                          linewidth=1, edgecolor='black'))
 
         # Adicionar marcador do diâmetro mínimo dos elementos
         path_diam_verts = [[xmax - rmin * 2 - 0.01 * dx, ymax - 0.01 * dx],
@@ -269,6 +293,7 @@ class Plot:
 
         ax.add_collection(PatchCollection(elementos_poli, match_original=True))
         ax.add_collection(PatchCollection(elementos_barra, match_original=True))
+        # ax.add_collection(PatchCollection(linhas_cont, match_original=True))
         plt.axis('off')
         plt.grid(b=None)
 
