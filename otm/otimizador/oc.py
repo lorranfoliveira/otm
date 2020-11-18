@@ -2,7 +2,7 @@ import numpy as np
 from loguru import logger
 from julia import Main
 from scipy.spatial import KDTree
-from typing import Union, List
+from typing import Union, List, Optional
 from otm.mef.materiais import Concreto
 from otm.dados import Dados
 from otm.mef.estrutura import Estrutura
@@ -599,7 +599,7 @@ class OC:
         # Percentual de densidadaes intermediárias inicial.
         di_ant = 100
         # Tensões nos elementos.
-        tensoes_ant = None
+        tensoes_ant: Optional[list] = None
 
         def otimizar_p_beta_fixos(p, beta):
             """Otimiza as variáveis de projeto para um valor fixo de `p` e `beta`. Este processo é
@@ -716,8 +716,24 @@ class OC:
                 beta_i = min(1.4 * beta_i, OC.BETA_MAX)
                 otimizar_p_beta_fixos(self.p, beta_i)
 
-
-
         # Salvar resultados no arquivo `.zip`.
         self.dados.salvar_arquivo_numpy(np.array(resultados_rho), 14)
         self.dados.salvar_arquivo_numpy(np.array(resultados_gerais), 15)
+
+        # Cálculo das tensões principais
+        tensoes = []
+        for i, tens in enumerate(tensoes_ant):
+            if i < self.dados.num_elementos_poli:
+                sx = tens[0]
+                sy = tens[1]
+                txy = tens[2]
+                p1 = (sx + sy) / 2
+                p2 = np.sqrt(((sx - sy) / 2) ** 2 + txy ** 2)
+                s1 = p1 + p2
+                s2 = p1 - p2
+
+                tensoes.append(s1 if abs(s1) > abs(s2) else s2)
+            else:
+                tensoes.append(tens)
+
+        self.dados.salvar_arquivo_numpy(np.array(tensoes), 22)

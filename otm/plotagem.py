@@ -251,20 +251,19 @@ class Plot:
                     elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
                                                           facecolor=cm.binary(rho_final[j])))
             else:
-                if rho_final[j] >= corte_barras:
-                    verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
-                    codes = [path.Path.MOVETO, path.Path.LINETO]
+                verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
+                codes = [path.Path.MOVETO, path.Path.LINETO]
 
-                    rho = 10 * rho_final[j] / x_bar_max
-                    # rho = 3 if rho_final[j] > 0 else 0
+                rho = 10 * rho_final[j] / x_bar_max
+                # rho = 3 if rho_final[j] > 0 else 0
 
-                    if rho > 0:
-                        if tipo_cmap == 'jet':
-                            elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
-                                                                     linewidth=rho, edgecolor='black'))
-                        else:
-                            elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
-                                                                     linewidth=rho, edgecolor='red'))
+                if rho > 0:
+                    if tipo_cmap == 'jet':
+                        elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
+                                                                 linewidth=rho, edgecolor='black'))
+                    else:
+                        elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
+                                                                 linewidth=rho, edgecolor='red'))
         # Enumerar os pontos
         if visualizar_areas_barras:
             for i in range(self.dados.num_elementos_poli, self.dados.num_elementos):
@@ -328,28 +327,28 @@ class Plot:
         plt.title(f'{tecnica_otm}     {els}     {vf}     {di}    {rmin}')
         plt.show()
 
-    def plotar_tensoes_estrutura(self, tipo_grafico=0):
-        """Exibe a malha final gerada. cmad jet ou binary.
-
-        Args:
-            tipo_grafico: Tipo de gráfico em que as tensões serão plotadas. 0 para plotar tensões com
-                valores intermediários; 1 para plotar tensões de tração e compressão com valores fixos
-                (gráfico com apenas duas cores).
-        """
-        logger.info('Criando o desenho da malha final')
+    def plotar_tensoes(self):
+        """Exibe a malha final gerada. cmad jet ou binary"""
+        plt.rcParams['pdf.fonttype'] = 42
+        plt.rcParams['font.family'] = 'Calibri'
 
         # Resultados finais
-        tensoes = Estrutura.tensoes_elementos(self.dados, self.dados.deslocamentos_estrutura_original)
-        max_tens_abs = np.max(np.abs(tensoes))
+        tensoes = self.dados.ler_arquivo_entrada_dados_numpy(22)
+        tensoes_norm = np.full(len(tensoes), 0.5)
+        rho_final = self.dados.rhos_iteracao_final()
 
-        def normalizar_tensao(x):
-            """Função interna que normaliza as tensões dos elementos na estrutura para um intervalo
-            entre 0 e 1."""
-            nonlocal max_tens_abs, tipo_grafico
-            if tipo_grafico == 0:
-                return x / (2 * max_tens_abs) + 0.5
+        for i, rho_i in enumerate(rho_final):
+            if i < self.dados.num_elementos_poli:
+                if abs(rho_i) > 1e-8:
+                    if tensoes[i] >= 0:
+                        tensoes_norm[i] = 1
+                    else:
+                        tensoes_norm[i] = 0
             else:
-                return 0.0 if (x < 0) else 1.0
+                if tensoes[i] >= 0:
+                    tensoes_norm[i] = 1
+                else:
+                    tensoes_norm[i] = 0
 
         fig, ax = plt.subplots()
         win = plt.get_current_fig_manager()
@@ -363,14 +362,28 @@ class Plot:
         plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
 
         elementos_poli = []
+        elementos_barra = []
+        x_bar_max = max(rho_final[self.dados.num_elementos_poli::])
         for j, el in enumerate(self.dados.elementos):
-            elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
-                                                  facecolor=cm.seismic(normalizar_tensao(tensoes[j]))))
+            if j < self.dados.num_elementos_poli:
+                elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
+                                                      facecolor=cm.seismic(tensoes_norm[j])))
+            else:
+                verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
+                codes = [path.Path.MOVETO, path.Path.LINETO]
+
+                rho = 10 * rho_final[j] / x_bar_max
+                # rho = 3 if rho_final[j] > 0 else 0
+
+                if rho > 0:
+                    elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
+                                                             linewidth=rho, edgecolor=cm.seismic(tensoes_norm[j])))
 
         ax.add_collection(PatchCollection(elementos_poli, match_original=True))
-        # ax.add_collection(PathCollection(elementos_barra, linewidths=0.7, edgecolors='purple'))
+        ax.add_collection(PatchCollection(elementos_barra, match_original=True))
+
         plt.axis('off')
         plt.grid(b=None)
 
-        plt.title(f'Tensões na estrutura')
+        plt.title(f'Tensões nos elementos')
         plt.show()

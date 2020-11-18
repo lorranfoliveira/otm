@@ -23,7 +23,8 @@ ARQUIVOS_DADOS_ZIP = {0: f'{_prefixos_chave[0]}_elementos.npz',
                       13: f'{_prefixos_chave[2]}_pesos_nos.npz',
                       # Resultados.
                       14: f'{_prefixos_chave[3]}_resultados_rho.npy',
-                      15: f'{_prefixos_chave[3]}_resultados_gerais.npy'}
+                      15: f'{_prefixos_chave[3]}_resultados_gerais.npy',
+                      22: f'{_prefixos_chave[3]}_tensoes_elementos.npy'}
 
 # Inserir a matriz B no arquivo para a utilização do concreto como material ortotrópico
 
