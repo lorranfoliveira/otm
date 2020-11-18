@@ -216,7 +216,7 @@ class Plot:
         plt.title(f'Estrutura original deformada       escala: {escala}')
         plt.show()
 
-    def plotar_estrutura_otimizada(self, tecnica_otimizacao: int, corte_barras: float = 0.1, rmin: float = 0,
+    def plotar_estrutura_otimizada(self, tecnica_otimizacao: int, rmin: float = 0,
                                    tipo_cmap: str = 'binary', visualizar_areas_barras=False):
         """Exibe a malha final gerada. cmad jet ou binary"""
         logger.info('Criando o desenho da malha final')
