@@ -1,4 +1,5 @@
 using SparseArrays
+using LinearAlgebra
 include("LeituraDados.jl")
 
 """

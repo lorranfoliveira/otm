@@ -182,6 +182,10 @@ class Dados:
             self._matrizes_rigidez_barras = self.ler_arquivo_entrada_dados_numpy(20)
         return self._matrizes_rigidez_barras
 
+    @matrizes_rigidez_barras.setter
+    def matrizes_rigidez_barras(self, value):
+        self._matrizes_rigidez_barras = value
+
     @property
     def volumes_elementos_solidos(self) -> np.ndarray:
         """Vetor contendo os volumes sólidos dos elementos finitos da malha."""

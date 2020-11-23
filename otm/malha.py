@@ -65,13 +65,27 @@ class Malha:
         Exemplo - {'geometria' : [[No1, No2], [No3, No4]]}
         """
         dic = {}
+        classe_linha = ezdxf.entities.line.Line
         for layer in self.layers:
             if any(layer.startswith(i) for i in Malha.LAYERS):
-                n = len(self.layers[layer])
-                dic[layer] = np.zeros((n, 4))
-                for j in range(n):
-                    dic[layer][j] = list(map(lambda v: round(v, 3), self.layers[layer][j].dxf.start[:2])) + \
-                                    list(map(lambda v: round(v, 3), self.layers[layer][j].dxf.end[:2]))
+                dic[layer] = []
+                for obj_layer in self.layers[layer]:
+                    if isinstance(obj_layer, classe_linha):
+                        dic[layer].append(list(map(lambda v: round(v, 3), obj_layer.dxf.start[:2])) + \
+                                          list(map(lambda v: round(v, 3), obj_layer.dxf.end[:2])))
+                dic[layer] = np.array(dic[layer])
+        return dic
+
+    def _dicionario_pontos_dxf(self) -> Dict[str, np.ndarray]:
+        dic = {}
+        classe_ponto = ezdxf.entities.point.Point
+        for layer in self.layers:
+            if any(layer.startswith(i) for i in Malha.LAYERS):
+                dic[layer] = []
+                for obj_layer in self.layers[layer]:
+                    if isinstance(obj_layer, classe_ponto):
+                        dic[layer].append(list(map(lambda v: round(v, 3), obj_layer.dxf.location[:2])))
+                dic[layer] = np.array(dic[layer])
         return dic
 
     def _contorno_geometria(self) -> MultiLineString:
@@ -85,10 +99,13 @@ class Malha:
         return MultiLineString(linhas)
 
     def _salvar_nos_rastreados(self, vertices: np.ndarray):
-        """Salva os nós rastreados pelo layer 'rastrear_nos{i}'"""
-        lin_layers = self._dicionario_linhas_dxf()
+        """Salva os nós rastreados pelo layer 'rastreador_nos{i}'"""
+        linhas_layers = self._dicionario_linhas_dxf()
+        pontos_layers = self._dicionario_pontos_dxf()
         dmed = self.diametro_medio_elementos(self.poligono_estrutura())
 
+        # Nós rastreados
+        nos_rastreados = {}
         # KDTree
         kd = KDTree(vertices)
 
@@ -96,34 +113,39 @@ class Malha:
 
         nome_arq_txt = ARQUIVOS_DADOS_ZIP[16]
 
-        if any(i.startswith(Malha.LAYER_RASTREADOR_NOS) for i in lin_layers):
+        if any(i.startswith(Malha.LAYER_RASTREADOR_NOS) for i in linhas_layers):
+            for layer_rastreado in linhas_layers:
+                if layer_rastreado.startswith(Malha.LAYER_RASTREADOR_NOS):
+                    linhas = []
+                    nos_rastreados[layer_rastreado] = []
+
+                    for lin in linhas_layers[layer_rastreado]:
+                        x1, y1, x2, y2 = lin
+                        linhas.append(LineString([(x1, y1), (x2, y2)]))
+                    multiline_i = MultiLineString(linhas)
+
+                    # Identificar pontos
+                    multiline_i = multiline_i.buffer(0.1 * dmed)
+                    pontos_contorno = multiline_i.intersection(multipontos)
+
+                    # Adicionando os nós rastreados pelas linhas
+                    if not isinstance(pontos_contorno, Point):
+                        if len(pontos_contorno) > 0:
+                            for p in pontos_contorno:
+                                nos_rastreados[layer_rastreado].append(kd.query(p.coords[:][0])[1])
+                    else:
+                        nos_rastreados[layer_rastreado].append(kd.query(pontos_contorno.coords[:][0])[1])
+
+                    # Adicionando os nós rastreados pelos pontos.
+                    pts = pontos_layers[layer_rastreado]
+                    for id_pt in range(pts.shape[0]):
+                        nos_rastreados[layer_rastreado].append(kd.query(pts[id_pt])[1])
+
+            # Salvar a identificação do ponto no arquivo
             with open(nome_arq_txt, 'w') as arq:
-                for rast in lin_layers:
-                    if rast.startswith(Malha.LAYER_RASTREADOR_NOS):
-                        linhas = []
-                        for lin in lin_layers[rast]:
-                            x1, y1, x2, y2 = lin
-                            linhas.append(LineString([(x1, y1), (x2, y2)]))
-                        multiline_i = MultiLineString(linhas)
-
-                        # Identificar pontos
-                        multiline_i = multiline_i.buffer(0.1 * dmed)
-                        pontos_contorno = multiline_i.intersection(multipontos)
-
-                        # Identificação dos nós do rastreador i
-                        ids = []
-                        if not isinstance(pontos_contorno, Point):
-                            if len(pontos_contorno) > 0:
-                                for p in pontos_contorno:
-                                    ids.append(kd.query(p.coords[:][0])[1])
-                            else:
-                                pprox = nearest_points(multiline_i, multipontos)[1]
-                                ids.append(kd.query(pprox.coords[:][0])[1])
-                        else:
-                            ids.append(kd.query(pontos_contorno.coords[:][0])[1])
-
-                        # Salvar a identificação do ponto no arquivo
-                        arq.write(f'{rast} = {sorted(ids)}\n')
+                for lay in nos_rastreados:
+                    if (len(nos_rastreados[lay])) > 0:
+                        arq.write(f'{lay} = {sorted(set(nos_rastreados[lay]))}\n')
 
             # Salvar no arquivo zip
             with zipfile.ZipFile(self.dados.arquivo.name, 'a', compression=zipfile.ZIP_DEFLATED) as arq_zip:
@@ -535,7 +557,7 @@ class Malha:
                     if (poli_elem := Polygon([vertices[n] for n in elem])).contains(ponto_gs_geo):
                         # TODO Verificar depois
                         # Modificar apenas pontos
-                        if contorno_sem_buff.distance(ponto_gs_geo) >= 0.9 * d:
+                        if contorno_sem_buff.distance(ponto_gs_geo) >= 0.95 * d:
                             # Ponto do elemento que é mais próximo do ponto da malha da ground structure
                             ponto_prox = nearest_points(MultiPoint(poli_elem.boundary.coords), ponto_gs_geo)[0]
                             # Diferenças em x e em y entre os pontos
@@ -683,8 +705,8 @@ class Malha:
 
         # Adição dos elementos da treliça hiperconectada
         elementos_barra, vertices_final = self._criar_trelica_hiperconectada(poligono, elementos_final,
-                                                                             vertices_final, d=3, nivel_conect=2,
-                                                                             espacamento=28)
+                                                                             vertices_final, d=2, nivel_conect=3,
+                                                                             espacamento=4)
 
         elementos_final += elementos_barra
         logger.success(f'Malha finalizada com {len(elementos_final)} elementos, {len(vertices_final)} nós e '

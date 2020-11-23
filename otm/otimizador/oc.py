@@ -2,7 +2,7 @@ import numpy as np
 from loguru import logger
 from julia import Main
 from scipy.spatial import KDTree
-from typing import Union, List
+from typing import Union, List, Optional
 from otm.mef.materiais import Concreto
 from otm.dados import Dados
 from otm.mef.estrutura import Estrutura
@@ -36,8 +36,10 @@ class OC:
     TECNICA_OTM_EP_HEAVISIDE = [2, 4]
     # Valor mínimo que as variáveis de projeto podem assumir.
     X_MIN = 1e-9
+    # X_MIN = 0
     # Convergência da análise estrutural.
-    DIFERENCA_MIN_ANGULO_MEDIO = 0.01
+    # DIFERENCA_MIN_ANGULO_MEDIO = 0.01
+    DIFERENCA_MIN_ANGULO_MEDIO = 0.1
     # Fração do volume do material disponível que será inicialmente distribuído para as barras.
     # Considera-se como volume máximo possível para a estrutura o volume total dos elementos finitos poligonais.
     FRACAO_VOLUME_INICIAL_BARRAS = 0.2
@@ -509,8 +511,55 @@ class OC:
 
         return x_novo
 
-    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50):
+    def filtro(self, tensoes_ant):
+
+        logger.info('Iniciando o a aplicação do filtro...')
+
+        u = self.deslocamentos_nodais(tensoes_ant)
+        flex_inicial = self.flexibilidade_media(u)
+        rho_a = self.rho[self.dados.num_elementos_poli::]
+        k_bars = self.dados.matrizes_rigidez_barras.copy()
+
+        flex_aumento_max = 1.1
+
+        logger.info(f'Flexibilidade média inicial:{flex_inicial}\n')
+
+        # Intervalos de busca
+        a = 0
+        b = max(rho_a)
+        tol = 1e-4 * (b - a)
+
+        for i in range(50):
+            erro = abs((b - a) / 2)
+
+            self.dados.matrizes_rigidez_barras = k_bars.copy()
+
+            c = (a + b) / 2
+            indices = np.where(rho_a <= c)[0]
+
+            for j in indices:
+                self.dados.matrizes_rigidez_barras[j] = 0 * self.dados.matrizes_rigidez_barras[j]
+
+            u = self.deslocamentos_nodais(tensoes_ant)
+            flex = self.flexibilidade_media(u)
+            logger.info(f'Corte:{c}\t Flexibilidade média:{flex}\t erro:{erro}')
+            # Número de vezes que a compliance aumentou desde a última iteração.
+            flex_aumento = flex / flex_inicial
+            if (erro <= tol) and (flex_aumento <= flex_aumento_max):
+                self.rho[self.dados.num_elementos_poli + indices] = 0
+                self.x[self.dados.num_nos() + indices] = 0
+
+                logger.success('Filtragem finalizada!')
+                break
+
+            if flex_aumento > flex_aumento_max:
+                b = c
+            else:
+                a = c
+
+    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50, aplicar_filtro=True):
         """Aplica o processo de otimização aos dados da estrutura.
+        TODO inserir uma forma mais limpa de zerar as matrizes de rigidez das barras excluídas
 
         Se o passo for -1, apenas um valor de p será rodado
         Args:
@@ -550,7 +599,7 @@ class OC:
         # Percentual de densidadaes intermediárias inicial.
         di_ant = 100
         # Tensões nos elementos.
-        tensoes_ant = None
+        tensoes_ant: Optional[list] = None
 
         def otimizar_p_beta_fixos(p, beta):
             """Otimiza as variáveis de projeto para um valor fixo de `p` e `beta`. Este processo é
@@ -651,6 +700,12 @@ class OC:
         for p_i in ps:
             otimizar_p_beta_fixos(p_i, 0)
 
+        # Aplicação do filtro para a eliminação de barras pouco influentes
+        if aplicar_filtro:
+            self.filtro(tensoes_ant)
+            tensoes_ant = None
+            otimizar_p_beta_fixos(self.p, 0)
+
         # Continuidade em beta.
         if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
             self.p = 3
@@ -664,3 +719,21 @@ class OC:
         # Salvar resultados no arquivo `.zip`.
         self.dados.salvar_arquivo_numpy(np.array(resultados_rho), 14)
         self.dados.salvar_arquivo_numpy(np.array(resultados_gerais), 15)
+
+        # Cálculo das tensões principais
+        tensoes = []
+        for i, tens in enumerate(tensoes_ant):
+            if i < self.dados.num_elementos_poli:
+                sx = tens[0]
+                sy = tens[1]
+                txy = tens[2]
+                p1 = (sx + sy) / 2
+                p2 = np.sqrt(((sx - sy) / 2) ** 2 + txy ** 2)
+                s1 = p1 + p2
+                s2 = p1 - p2
+
+                tensoes.append(s1 if abs(s1) > abs(s2) else s2)
+            else:
+                tensoes.append(tens)
+
+        self.dados.salvar_arquivo_numpy(np.array(tensoes), 22)
