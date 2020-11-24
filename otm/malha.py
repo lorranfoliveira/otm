@@ -670,16 +670,18 @@ class Malha:
         # Salvar arquivo `.dxf`.
         self.dados.salvar_arquivo_generico_em_zip(self.dados.arquivo.with_suffix('.dxf').name)
 
-    def criar_malha(self, esp_faixa_espelhamento: float, num_iteracoes: int,
-                    tol_colapso_pontos: float = 0.2) -> tuple:
-        """Executa todas as funções necessárias para a criação da malha completa do domínio.
+    def criar_malha(self, esp_faixa_espelhamento: float, num_iteracoes: int, tol_colapso_pontos: float = 0.1,
+                    nivel_conectividade: int = None, espacamento_entre_barras: int = None, d: int = None):
+        """Executa todas as funções necessárias para a criação da malha completa do domínio. Os elementos de barra só
+        serão adicionados se e somente se `nivel_conectividade`, `espacamento_entre_barras` e `d` forem diferentes de
+        None.
 
         Args:
             esp_faixa_espelhamento: Espessura da faixa de espelhamento (auxiliar para os pontos auxiliares).
             num_iteracoes: Número máximo de iterações.
             tol_colapso_pontos: Fator de tolerância para o colapso de pontos próximos.
-            nivel_conect_gs: Nível de conectividade da treliça hiperconectada.
-            espacamento_gs: Quantidade de vezes em que o espaçamento dos nós da treliça hiperconectada
+            nivel_conectividade: Nível de conectividade da treliça hiperconectada.
+            espacamento_entre_barras: Quantidade de vezes em que o espaçamento dos nós da treliça hiperconectada
                 é maior que o dos elementos poligonais regulares.
             d: Distância entre os pontos da malha primária da ground structure.
 
@@ -704,15 +706,16 @@ class Malha:
         elementos_final = self.corrigir_sentido_anti_horario_dos_nos_elementos(vertices_final, elementos)
 
         # Adição dos elementos da treliça hiperconectada
-        elementos_barra, vertices_final = self._criar_trelica_hiperconectada(poligono, elementos_final,
-                                                                             vertices_final, d=2, nivel_conect=3,
-                                                                             espacamento=4)
+        if (nivel_conectividade is not None) and (espacamento_entre_barras is not None) and (d is not None):
+            elementos_barra, vertices_final = self._criar_trelica_hiperconectada(poligono, elementos_final,
+                                                                                 vertices_final, d=d,
+                                                                                 nivel_conect=nivel_conectividade,
+                                                                                 espacamento=espacamento_entre_barras)
 
-        elementos_final += elementos_barra
+            elementos_final += elementos_barra
+
         logger.success(f'Malha finalizada com {len(elementos_final)} elementos, {len(vertices_final)} nós e '
                        f'{len(vertices_final) * 2} graus de liberdade')
 
         self.salvar_malha(vertices_final, elementos_final)
         self._salvar_nos_rastreados(vertices_final)
-
-        return elementos_final, vertices_final
