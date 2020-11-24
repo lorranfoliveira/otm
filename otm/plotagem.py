@@ -241,7 +241,11 @@ class Plot:
 
         elementos_poli = []
         elementos_barra = []
-        x_bar_max = max(rho_final[self.dados.num_elementos_poli::])
+
+        x_bar_max = 0
+        if self.dados.tem_barras():
+            x_bar_max = max(rho_final[self.dados.num_elementos_poli::])
+
         for j, el in enumerate(self.dados.elementos):
             if j < self.dados.num_elementos_poli:
                 if tipo_cmap == 'jet':
@@ -265,16 +269,17 @@ class Plot:
                         elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
                                                                  linewidth=rho, edgecolor='red'))
         # Enumerar os pontos
-        if visualizar_areas_barras:
-            for i in range(self.dados.num_elementos_poli, self.dados.num_elementos):
-                if rho_final[i] > 0:
-                    # Centro da barra
-                    nos_barra_i = self.dados.nos[self.dados.elementos[i]]
-                    c = (nos_barra_i[0] + nos_barra_i[1]) / 2
+        if self.dados.tem_barras():
+            if visualizar_areas_barras:
+                for i in range(self.dados.num_elementos_poli, self.dados.num_elementos):
+                    if rho_final[i] > 0:
+                        # Centro da barra
+                        nos_barra_i = self.dados.nos[self.dados.elementos[i]]
+                        c = (nos_barra_i[0] + nos_barra_i[1]) / 2
 
-                    cor = 'white' if tipo_cmap == 'jet' else 'blue'
-                    ax.text(c[0], c[1], f'{rho_final[i] / x_bar_max:.2E}', ha="center", va="center",
-                            size=0.05 * min(dx, dy), color=cor)
+                        cor = 'white' if tipo_cmap == 'jet' else 'blue'
+                        ax.text(c[0], c[1], f'{rho_final[i] / x_bar_max:.2E}', ha="center", va="center",
+                                size=0.05 * min(dx, dy), color=cor)
 
         # Desenhar o domínio do desenho
         # contorno = self.dados.poligono_dominio_estendido.boundary.coords[:]
@@ -291,7 +296,9 @@ class Plot:
         ax.add_patch(patches.PathPatch(path_diam, linewidth=2, color='magenta'))
 
         ax.add_collection(PatchCollection(elementos_poli, match_original=True))
-        ax.add_collection(PatchCollection(elementos_barra, match_original=True))
+
+        if self.dados.tem_barras():
+            ax.add_collection(PatchCollection(elementos_barra, match_original=True))
         # ax.add_collection(PatchCollection(linhas_cont, match_original=True))
         plt.axis('off')
         plt.grid(b=None)
