@@ -144,7 +144,8 @@ class Concreto(Material):
     def matriz_constitutiva_isotropico(self) -> np.ndarray:
         """Retorna a matriz constitutiva elástica para um material isotrópico. Utiliza-se o módulo de
         elasticidade do concreto à compressão."""
-        e0 = self.ec
+        # e0 = self.ec
+        e0 = 1
         nu = self.nu
         return (e0 / (1 - nu ** 2)) * np.array([[1, nu, 0],
                                                 [nu, 1, 0],
