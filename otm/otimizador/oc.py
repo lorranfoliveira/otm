@@ -511,7 +511,7 @@ class OC:
 
         return x_novo
 
-    def filtro(self, tensoes_ant):
+    def filtro(self, tensoes_ant, parametro_filtro: Optional[float] = 10):
 
         logger.info('Iniciando o a aplicação do filtro...')
 
@@ -519,8 +519,6 @@ class OC:
         flex_inicial = self.flexibilidade_media(u)
         rho_a = self.rho[self.dados.num_elementos_poli::]
         k_bars = self.dados.matrizes_rigidez_barras.copy()
-
-        flex_aumento_max = 1.1
 
         logger.info(f'Flexibilidade média inicial:{flex_inicial}\n')
 
@@ -545,19 +543,20 @@ class OC:
             logger.info(f'Corte:{c}\t Flexibilidade média:{flex}\t erro:{erro}')
             # Número de vezes que a compliance aumentou desde a última iteração.
             flex_aumento = flex / flex_inicial
-            if (erro <= tol) and (flex_aumento <= flex_aumento_max):
+            if (erro <= tol) and (flex_aumento <= parametro_filtro):
                 self.rho[self.dados.num_elementos_poli + indices] = 0
                 self.x[self.dados.num_nos() + indices] = 0
 
                 logger.success('Filtragem finalizada!')
                 break
 
-            if flex_aumento > flex_aumento_max:
+            if flex_aumento > parametro_filtro:
                 b = c
             else:
                 a = c
 
-    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50, aplicar_filtro=True):
+    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50,
+                           parametro_fitro: Optional[float] = 10):
         """Aplica o processo de otimização aos dados da estrutura.
         TODO inserir uma forma mais limpa de zerar as matrizes de rigidez das barras excluídas
 
@@ -699,16 +698,15 @@ class OC:
         # Continuidade no coeficiente de penalização com `beta = 0`.
         for p_i in ps:
             otimizar_p_beta_fixos(p_i, 0)
-
+        self.p = 3
         # Aplicação do filtro para a eliminação de barras pouco influentes
-        if aplicar_filtro:
-            self.filtro(tensoes_ant)
+        if parametro_fitro is not None:
+            self.filtro(tensoes_ant, parametro_fitro)
             tensoes_ant = None
             otimizar_p_beta_fixos(self.p, 0)
 
         # Continuidade em beta.
         if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
-            self.p = 3
             # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
             # 1.5 * 1/3 = 0.5.
             beta_i = 1 / 3
