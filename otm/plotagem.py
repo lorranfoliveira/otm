@@ -11,6 +11,8 @@ from otm.otimizador.oc import OC
 from otm.dados import Dados
 from sympy.utilities.lambdify import lambdify
 import numpy as np
+from matplotlib.animation import FuncAnimation, writers
+import matplotlib as mpl
 
 __all__ = ['Plot']
 
@@ -258,7 +260,7 @@ class Plot:
                 verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
                 codes = [path.Path.MOVETO, path.Path.LINETO]
 
-                rho = 10 * rho_final[j] / x_bar_max
+                rho = 5 * rho_final[j] / x_bar_max
                 # rho = 3 if rho_final[j] > 0 else 0
 
                 if rho > 0:
@@ -333,6 +335,81 @@ class Plot:
 
         plt.title(f'{tecnica_otm}     {els}     {vf}     {di}    {rmin}')
         plt.show()
+
+    def plotar_animacao_otimizacao(self, tipo_cmap: str = 'binary', salvar=True):
+        """Exibe a malha final gerada. cmad jet ou binary"""
+        plt.rcParams['pdf.fonttype'] = 42
+        plt.rcParams['font.family'] = 'Calibri'
+        mpl.rcParams['animation.ffmpeg_path'] = r'C:\Users\Lorran\Documents\Mestrado\otm\ffmpeg\bin\ffmpeg.exe'
+        video_anim = r'C:\Users\Lorran\Documents\Mestrado\otm\animacao.mp4'
+
+        # Resultados finais
+        rhos = self.dados.resultados_rho
+
+        fig, ax = plt.subplots()
+        win = plt.get_current_fig_manager()
+        win.window.state('zoomed')
+
+        def frame(i):
+            nonlocal rhos, ax
+
+            ax.clear()
+            ax.axis('equal')
+
+            rhos_i = rhos[i]
+
+            elementos_poli = []
+            elementos_barra = []
+
+            x_bar_max = 0
+            if self.dados.tem_barras():
+                x_bar_max = max(rhos_i[self.dados.num_elementos_poli::])
+
+            for j, el in enumerate(self.dados.elementos):
+                if j < self.dados.num_elementos_poli:
+                    if tipo_cmap == 'jet':
+                        elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
+                                                              facecolor=cm.jet(rhos_i[j])))
+                    else:
+                        elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
+                                                              facecolor=cm.binary(rhos_i[j])))
+                else:
+                    verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
+                    codes = [path.Path.MOVETO, path.Path.LINETO]
+
+                    rho = 5 * rhos_i[j] / x_bar_max
+                    # rho = 3 if rho_final[j] > 0 else 0
+
+                    if rho > 0:
+                        if tipo_cmap == 'jet':
+                            elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
+                                                                     linewidth=rho, edgecolor='black'))
+                        else:
+                            elementos_barra.append(patches.PathPatch(path.Path(verts, codes),
+                                                                     linewidth=rho, edgecolor='red'))
+
+            ax.add_collection(PatchCollection(elementos_poli, match_original=True))
+
+            if self.dados.tem_barras():
+                ax.add_collection(PatchCollection(elementos_barra, match_original=True))
+
+            return ax
+
+        animation = FuncAnimation(fig, func=frame, frames=len(rhos), interval=10)
+
+        xmin, ymin, xmax, ymax = self.dados.poligono_dominio_estendido.bounds
+        dx = xmax - xmin
+        dy = ymax - ymin
+        plt.xlim(xmin - 0.1 * dx, xmax + 0.1 * dx)
+        plt.ylim(ymin - 0.1 * dy, ymax + 0.1 * dy)
+        # plt.axis('off')
+        # plt.grid(b=None)
+
+        if salvar:
+            writer = writers['ffmpeg'](fps=10)
+            animation.save(video_anim, writer=writer)
+        else:
+            plt.show()
 
     def plotar_tensoes(self):
         """Exibe a malha final gerada. cmad jet ou binary"""
