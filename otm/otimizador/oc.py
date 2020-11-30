@@ -709,9 +709,14 @@ class OC:
         if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
             # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
             # 1.5 * 1/3 = 0.5.
-            beta_i = 1 / 3
+            beta_i = 2 / 3
             while beta_i < OC.BETA_MAX:
-                beta_i = min(1.4 * beta_i, OC.BETA_MAX)
+                di = self.percentual_densidades_intermediarias()
+
+                if di > 5:
+                    beta_i = min(1.5 * beta_i, OC.BETA_MAX)
+                else:
+                    beta_i += 5
                 otimizar_p_beta_fixos(self.p, beta_i)
 
         # Salvar resultados no arquivo `.zip`.
