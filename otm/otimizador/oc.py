@@ -555,8 +555,7 @@ class OC:
             else:
                 a = c
 
-    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50,
-                           parametro_fitro: Optional[float] = 10):
+    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, parametro_fitro: Optional[float] = None):
         """Aplica o processo de otimização aos dados da estrutura.
         TODO inserir uma forma mais limpa de zerar as matrizes de rigidez das barras excluídas
 
@@ -565,7 +564,6 @@ class OC:
             erro_max: Máximo erro percentual permitido para que ocorra a convergência da otimização.
             passo_p: Passo que define os acréscimos ao coeficiente de penalização do modelo SIMP `p`
                 durante a aplicação do método da continuação.
-            num_max_iteracoes: Número máximo de iterações permitidas no processo de otimização.
         """
         logger.info('Iniciando a otimização da estrutura')
 
@@ -615,7 +613,7 @@ class OC:
             # Interface com Julia
             self.julia.p = self.p = p
 
-            for c in np.arange(1, num_max_iteracoes + 1):
+            for c in np.arange(1, OC.NUM_MAX_ITERS + 1):
                 it += 1
                 # As densidades relativas dos elementos são densidades nodais apenas em otimização sem
                 # esquema de projeção. Essa otimização é feita com `tecnica_otimizacao = 0` apenas.
@@ -707,9 +705,10 @@ class OC:
 
         # Continuidade em beta.
         if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
+            # Procedimento de Li e K. (2015)
             # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
             # 1.5 * 1/3 = 0.5.
-            beta_i = 2 / 3
+            beta_i = 1 / 3
             while beta_i < OC.BETA_MAX:
                 di = self.percentual_densidades_intermediarias()
 
