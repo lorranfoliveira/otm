@@ -1,12 +1,14 @@
 import otm
 import pathlib
+from time import time
+from datetime import timedelta
 from otm.otimizador.oc import OC
 from otm.plotagem import Plot
 from otm.dados import Dados
 
 # Dados de entrada
-raio_ep = 7
-fracao_volume = 0.4
+raio_ep = 2
+fracao_volume = 0.5
 delta_p = -1
 p = 3
 
@@ -42,22 +44,25 @@ def analisar_estrutura(dados):
     est.salvar_dados_estrutura()
 
 
-nome_arq = f'circulo_1'
+nome_arq = f'mbb'
 concreto = otm.Concreto(2490, 200, 0.2)
 aco = otm.Aco(0, 20000)
-dados = Dados(pathlib.Path(__file__).parent.joinpath(f'{nome_arq}.zip'), concreto, aco, 1)
+dados = Dados(pathlib.Path(__file__).parent.joinpath(f'{nome_arq}.zip'), concreto, aco, 0)
 
 # Gerar malha
-# malha = otm.Malha(dados, 20000)
-# malha.criar_malha(3, 300, 0.1, 2, 5, 2)
+malha = otm.Malha(dados, 20000)
+malha.criar_malha(3, 300, 0.1, 2, 5, 2)
 
 # analisar_estrutura(dados)
-
-otimizador = OC(dados, fracao_volume=fracao_volume, p=p, rmin=raio_ep, tecnica_otimizacao=1)
-otimizador.otimizar_estrutura(passo_p=delta_p, parametro_fitro=10)
+# otimizador = OC(dados, fracao_volume=fracao_volume, p=p, rmin=raio_ep, tecnica_otimizacao=0)
+#
+# t0 = time()
+# otimizador.otimizar_estrutura(erro_max=0, passo_p=delta_p)
+# with open(f'{dados.arquivo.stem}_tempo_execucao.txt', 'w') as arq:
+#     arq.write(f'{timedelta(seconds=time() - t0)}')
 
 plot = Plot(dados)
 # plot.plotar_malha()
-# plot.plotar_estrutura_deformada(1)
+# plot.plotar_estrutura_deformada(1e-3)
 plot.plotar_estrutura_otimizada(tecnica_otimizacao=1, rmin=raio_ep, tipo_cmap='jet')
 # plot.plotar_animacao_otimizacao('jet')

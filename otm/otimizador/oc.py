@@ -18,7 +18,7 @@ class OC:
     # 2 -> Xu et al. (2010).
     METODO_HEAVISIDE = 0
     # Máximo valor que pode ser assumido por beta.
-    BETA_MAX = 150
+    BETA_MAX = 200
     # Quantidade mínima de iterações.
     NUM_MIN_ITERS = 10
     # Quantidade máxima de iterações.
@@ -555,7 +555,8 @@ class OC:
             else:
                 a = c
 
-    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, parametro_fitro: Optional[float] = None):
+    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, parametro_fitro: Optional[float] = None,
+                           salvar_rhos_todas_iteracoes=False):
         """Aplica o processo de otimização aos dados da estrutura.
         TODO inserir uma forma mais limpa de zerar as matrizes de rigidez das barras excluídas
 
@@ -665,7 +666,9 @@ class OC:
                             f'erro_di: {erro_di:.5f}%\t')
 
                 # Adição dos resultados da iteração aos vetores de resultados.
-                resultados_rho.append(self.rho.copy())
+                if salvar_rhos_todas_iteracoes:
+                    resultados_rho.append(self.rho.copy())
+
                 resultados_gerais.append([c, p, beta, fo, vol_perc, di, erro_u, erro_di, vol_perc_poli,
                                           vol_perc_barras])
 
@@ -715,10 +718,13 @@ class OC:
                 if di > 5:
                     beta_i = min(1.5 * beta_i, OC.BETA_MAX)
                 else:
-                    beta_i += 5
+                    beta_i = min(beta_i + 5, OC.BETA_MAX)
                 otimizar_p_beta_fixos(self.p, beta_i)
 
         # Salvar resultados no arquivo `.zip`.
+        if not salvar_rhos_todas_iteracoes:
+            resultados_rho.append(self.rho.copy())
+
         self.dados.salvar_arquivo_numpy(np.array(resultados_rho), 14)
         self.dados.salvar_arquivo_numpy(np.array(resultados_gerais), 15)
 
