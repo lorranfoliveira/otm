@@ -670,8 +670,8 @@ class Malha:
         # Salvar arquivo `.dxf`.
         self.dados.salvar_arquivo_generico_em_zip(self.dados.arquivo.with_suffix('.dxf').name)
 
-    def criar_malha(self, esp_faixa_espelhamento: float, num_iteracoes: int, tol_colapso_pontos: float = 0.1,
-                    nivel_conectividade: int = None, espacamento_entre_barras: int = None, d: int = None):
+    def criar_malha(self, esp_faixa_espelhamento: float, num_iteracoes: int, nivel_conectividade: int = None,
+                    espacamento_entre_barras: int = None, d: int = None, tol_colapso_pontos: float = 0.1):
         """Executa todas as funções necessárias para a criação da malha completa do domínio. Os elementos de barra só
         serão adicionados se e somente se `nivel_conectividade`, `espacamento_entre_barras` e `d` forem diferentes de
         None.

@@ -511,22 +511,29 @@ class OC:
 
         return x_novo
 
-    def filtro(self, tensoes_ant, parametro_filtro: Optional[float] = 10):
+    def filtro(self, tensoes_ant, parametro_filtro: Optional[float] = 1.1):
 
         logger.info('Iniciando o a aplicação do filtro...')
 
         u = self.deslocamentos_nodais(tensoes_ant)
+
+        # Flexibilidade média inicial
         flex_inicial = self.flexibilidade_media(u)
+        # Flexibilidade média da última iteração válida
+        flex_ant_valida = flex_inicial
+        # Vetor de áreas normalizadas dos elementos de barra
         rho_a = self.rho[self.dados.num_elementos_poli::]
+        # Matrizes de rigidez dos elementos de barra
         k_bars = self.dados.matrizes_rigidez_barras.copy()
 
         logger.info(f'Flexibilidade média inicial:{flex_inicial}\n')
 
         # Intervalos de busca
         a = 0
-        b = max(rho_a)
+        b = np.max(rho_a)
         tol = 1e-4 * (b - a)
 
+        # Aplicação do método da bisseção
         for i in range(50):
             erro = abs((b - a) / 2)
 
@@ -539,21 +546,25 @@ class OC:
                 self.dados.matrizes_rigidez_barras[j] = 0 * self.dados.matrizes_rigidez_barras[j]
 
             u = self.deslocamentos_nodais(tensoes_ant)
-            flex = self.flexibilidade_media(u)
-            logger.info(f'Corte:{c}\t Flexibilidade média:{flex}\t erro:{erro}')
+            # Flexibilidade média na iteração corrente (i)
+            flex_i = self.flexibilidade_media(u)
             # Número de vezes que a compliance aumentou desde a última iteração.
-            flex_aumento = flex / flex_inicial
+            flex_aumento = flex_i / flex_ant_valida
+            # Log
+            logger.info(f'Corte:{c}\t Flexibilidade média:{flex_i}\t erro:{erro}\t Parâmetro do filtro: {flex_aumento}')
+            # Verificação da convergência
             if (erro <= tol) and (flex_aumento <= parametro_filtro):
                 self.rho[self.dados.num_elementos_poli + indices] = 0
                 self.x[self.dados.num_nos() + indices] = 0
 
                 logger.success('Filtragem finalizada!')
                 break
-
-            if flex_aumento > parametro_filtro:
-                b = c
             else:
-                a = c
+                if flex_aumento > parametro_filtro:
+                    b = c
+                else:
+                    a = c
+                    flex_ant_valida = flex_i
 
     def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, parametro_fitro: Optional[float] = None,
                            salvar_rhos_todas_iteracoes=False):
