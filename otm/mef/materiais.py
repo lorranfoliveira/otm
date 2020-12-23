@@ -169,12 +169,6 @@ class Concreto(Material):
         s = r @ tensoes
         return s[[0, 1]]
 
-    @staticmethod
-    def maior_tensao_no_elemento(sx, sy, txy) -> float:
-        # Tensões principais
-        s1, s2 = Concreto.tensoes_principais_elemento(sx, sy, txy)
-        return s1 if abs(s1) >= abs(s2) else s2
-
 
 class Aco(Material):
     def __init__(self, ec: float, et: float, nu: float = 0.3):
