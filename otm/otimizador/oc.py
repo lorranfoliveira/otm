@@ -183,10 +183,10 @@ class OC:
         self.kelems = kes_poli + kes_bars
         u = None
 
-        if self.dados.tipo_concreto == 0:
+        if self.dados.concreto.tipo == 0:
             self.julia.kelems = self.atualizar_matrizes_rigidez()
             return self.julia.eval(f'deslocamentos(kelems, dados)')
-        elif self.dados.tipo_concreto == 1:
+        elif self.dados.concreto.tipo == 1:
             # A convergência do processo de análise em função das tensões ocorre quando a média
             # dos ângulos de rotação para as tensões principais é menor que 0.01°.
             # Ângulo médio anterior

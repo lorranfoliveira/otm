@@ -23,20 +23,17 @@ class Dados:
     IDS_DADOS_OTIMIZACAO = [2]
     IDS_DADOS_RESULTADOS = [14, 15]
 
-    def __init__(self, arquivo: pathlib.Path, concreto: Concreto, aco: Optional[Aco] = None, tipo_concreto=0):
+    def __init__(self, arquivo: pathlib.Path, concreto: Concreto, aco: Optional[Aco] = None):
         """Construtor.
 
         Args:
             arquivo: Diretório do arquivo `.zip` do problema.
             concreto:
-            tipo_concreto: Se o tipo do concreto for 0, será utilizado o modelo isotrópico. Se for 1, será
-                utilizado o modelo ortotrópico.
         TODO introduzir o aço como material.
         """
         self.arquivo = arquivo
         self.concreto = concreto
         self.aco = aco
-        self.tipo_concreto = tipo_concreto
 
         # Dados da malha.
         self._elementos: Optional[np.ndarray] = None

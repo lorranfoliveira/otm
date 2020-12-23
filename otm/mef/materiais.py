@@ -63,8 +63,13 @@ class Material:
 class Concreto(Material):
     """Classe que descreve o concreto como um material ortotrópico segundo a teoria de Darwin e Pecknold."""
 
-    def __init__(self, ec: float, et: float, nu: float):
+    def __init__(self, ec: float, et: float, nu: float, tipo: int):
+        """
+        Args:
+            tipo: Tipo de concreto. Se 0, concreto isotrópico. Se 1, concreto ortotrópico.
+        """
         super().__init__(ec, et, nu)
+        self.tipo = tipo
 
     @staticmethod
     def matriz_rotacao_deformacoes(angulo: float):

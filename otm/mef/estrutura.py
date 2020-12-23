@@ -208,7 +208,7 @@ class Estrutura:
             n = len(dados.elementos[i])
             kel = np.zeros((2 * n, 2 * n))
             # Matriz constitutiva elástica.
-            if (dados.tipo_concreto == 0) or (tensoes is None):
+            if (dados.concreto.tipo == 0) or (tensoes is None):
                 d = dados.concreto.matriz_constitutiva_isotropico()
             else:
                 d = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes[i], deformacoes[i])
@@ -373,7 +373,7 @@ class Estrutura:
         # Matriz constitutiva elástica.
         for i in range(dados.num_elementos):
             if i < num_els_poli:
-                if (dados.tipo_concreto == 0) or (tensoes_ant is None):
+                if (dados.concreto.tipo == 0) or (tensoes_ant is None):
                     tensoes.append(dados.concreto.matriz_constitutiva_isotropico() @ defs[i])
                 else:
                     tensoes.append(dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i],
