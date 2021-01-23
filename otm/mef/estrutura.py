@@ -189,8 +189,7 @@ class Estrutura:
         return kels
 
     @staticmethod
-    def matrizes_rigidez_elementos_poligonais(dados: Dados, tensoes: Optional[np.ndarray] = None,
-                                              deformacoes: Optional[np.ndarray] = None) -> List[np.ndarray]:
+    def matrizes_rigidez_elementos_poligonais(dados: Dados, tensoes: Optional[np.ndarray] = None) -> List[np.ndarray]:
         """Atualiza as matrizes de rigidez dos elementos em função das tensões atuantes em cada um.
 
         Args:
@@ -211,7 +210,7 @@ class Estrutura:
             if (dados.concreto.tipo == 0) or (tensoes is None):
                 d = dados.concreto.matriz_constitutiva_isotropico()
             else:
-                d = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes[i], deformacoes[i])
+                d = dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes[i])
             # Iteração sobre os pontos de integração de cada elemento.
             for j in range(len(mb_pesos[i])):
                 # Matriz cinemática nodal do elemento no ponto de integração j.
@@ -376,8 +375,7 @@ class Estrutura:
                 if (dados.concreto.tipo == 0) or (tensoes_ant is None):
                     tensoes.append(dados.concreto.matriz_constitutiva_isotropico() @ defs[i])
                 else:
-                    tensoes.append(dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i],
-                                                                                              defs[i]) @ defs[i])
+                    tensoes.append(dados.concreto.matriz_constitutiva_ortotropica_rotacionada(tensoes_ant[i]) @ defs[i])
             else:
                 if tensoes_ant is None:
                     tensoes.append(dados.aco.et * defs[i])

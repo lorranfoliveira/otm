@@ -87,10 +87,11 @@ class Concreto(Material):
                          [-np.sin(t) * np.cos(t), np.sin(t) * np.cos(t), np.cos(t) ** 2 - np.sin(t) ** 2]])
 
     @staticmethod
-    def angulo_rotacao(ex, ey, exy) -> float:
+    def angulo_rotacao(sx, sy, sxy) -> float:
         """Retorna o ângulo de inclinação das sx e sy em relação ao eixo das tensões principais."""
         # return np.arctan((sx - sy) / (2 * txy)) / 2
-        return np.arctan((exy / (ex - ey))) / 2
+        # return np.arctan((exy / (ex - ey))) / 2
+        return np.arctan((sx - sy) / (2 * sxy)) / 2
 
     def matriz_constitutiva(self) -> np.ndarray:
         """Retorna a matriz constitutiva elástica nas direções dos eixos x e y."""
@@ -137,12 +138,13 @@ class Concreto(Material):
                                                   [e_12, e_2, 0],
                                                   [0, 0, 0.25 * (e_1 + e_2 - 2 * e_12)]])
 
-    def matriz_constitutiva_ortotropica_rotacionada(self, tensoes, deformacoes) -> np.ndarray:
+    def matriz_constitutiva_ortotropica_rotacionada(self, tensoes) -> np.ndarray:
         """Retorna a matriz constitutiva elástica rotacionada para os eixos principais."""
         # Hipótee: O ângulo deve
-        angulo = self.angulo_rotacao(*deformacoes)
+        angulo = self.angulo_rotacao(*tensoes)
         r = self.matriz_rotacao_deformacoes(angulo)
-        d = self.matriz_constitutiva_ortotropica(*self.tensoes_principais_elemento(angulo, tensoes))
+        tensoes_principais = self.tensoes_principais_elemento(tensoes)
+        d = self.matriz_constitutiva_ortotropica(*tensoes_principais)
 
         return r.T @ d @ r
 
@@ -157,8 +159,11 @@ class Concreto(Material):
                                                 [0, 0, (1 - nu) / 2]])
 
     @staticmethod
-    def tensoes_principais_elemento(angulo: float, tensoes: np.ndarray) -> np.ndarray:
+    def tensoes_principais_elemento(tensoes: np.ndarray) -> np.ndarray:
         """Retorna as tensões principais de um elemento."""
+        angulo = Concreto.angulo_rotacao(*tensoes)
+        # sx, sy, txy = tensoes
+        #
         # p1 = (sx + sy) / 2
         # p2 = np.sqrt(((sx - sy) / 2) ** 2 + txy ** 2)
         # s1 = p1 + p2
@@ -167,6 +172,7 @@ class Concreto(Material):
         # s2 = (tensoes[0] + tensoes[1]) / 2 - np.sqrt(((tensoes[0] - tensoes[1]) / 2) ** 2 + tensoes[2] ** 2)
         r = Concreto.matriz_rotacao_tensoes(angulo)
         s = r @ tensoes
+
         return s[[0, 1]]
 
 
