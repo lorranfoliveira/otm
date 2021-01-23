@@ -128,3 +128,7 @@ dmypy.json
 .vscode/
 
 *.zip
+
+*.dxf
+
+ffmpeg/

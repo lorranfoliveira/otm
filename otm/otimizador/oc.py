@@ -18,9 +18,9 @@ class OC:
     # 2 -> Xu et al. (2010).
     METODO_HEAVISIDE = 0
     # Máximo valor que pode ser assumido por beta.
-    BETA_MAX = 150
+    BETA_MAX = 200
     # Quantidade mínima de iterações.
-    NUM_MIN_ITERS = 10
+    NUM_MIN_ITERS = 5
     # Quantidade máxima de iterações.
     NUM_MAX_ITERS = 50
     # Técnicas de otimização.
@@ -166,11 +166,11 @@ class OC:
         return self.fracao_volume * sum(self.dados.volumes_elementos_solidos)
 
     @staticmethod
-    def angulos_rotacao_sistema_principal(deformacoes: np.ndarray):
+    def angulos_rotacao_sistema_principal(tensoes: np.ndarray):
         """Retorna os ângulos de rotação das deformações de cada elemento dos eixos globais para os
         eixos principais. São considerados apenas os elementos cujas densidade não são nulas. Os elementos
         Poligonais"""
-        return np.array([Concreto.angulo_rotacao(*defs) for defs in deformacoes if isinstance(defs, np.ndarray)])
+        return np.array([Concreto.angulo_rotacao(*tens) for tens in tensoes if isinstance(tens, np.ndarray)])
 
     def deslocamentos_nodais(self, tensoes_ant=None) -> np.ndarray:
         """Retorna os deslocamentos nodais em função das variáveis de projeto. Se o concreto
@@ -183,41 +183,39 @@ class OC:
         self.kelems = kes_poli + kes_bars
         u = None
 
-        if self.dados.tipo_concreto == 0:
+        if self.dados.concreto.tipo == 0:
             self.julia.kelems = self.atualizar_matrizes_rigidez()
             return self.julia.eval(f'deslocamentos(kelems, dados)')
-        elif self.dados.tipo_concreto == 1:
-            # A convergência do processo de análise em função das tensões ocorre quando a média
-            # dos ângulos de rotação para as tensões principais é menor que 0.01°.
-            # Ângulo médio anterior
-            angulo_medio = 100
-            diferenca_angulos_medios = 100
-
+        elif self.dados.concreto.tipo == 1:
             self.julia.kelems = self.atualizar_matrizes_rigidez()
             u = self.julia.eval(f'deslocamentos(kelems, dados)')
 
-            deformacoes = Estrutura.deformacoes_elementos(self.dados, u)
             if tensoes_ant is None:
                 tensoes = Estrutura.tensoes_elementos(self.dados, u)
             else:
                 tensoes = tensoes_ant.copy()
+            # A convergência do processo de análise em função das tensões ocorre quando a média
+            # dos ângulos de rotação para as tensões principais é menor que 0.01°.
+            # Ângulo médio anterior
+            angulos_rot = list(map(lambda x: degrees(abs(x)), self.angulos_rotacao_sistema_principal(tensoes)))
+            angulo_medio = sum(angulos_rot) / len(angulos_rot)
+            diferenca_angulos_medios = 100
+
             c = 0
             while (diferenca_angulos_medios >= OC.DIFERENCA_MIN_ANGULO_MEDIO) and (c <= 20):
                 c += 1
 
-                self.kelems = Estrutura.matrizes_rigidez_elementos_poligonais(self.dados, tensoes, deformacoes) + \
+                self.kelems = Estrutura.matrizes_rigidez_elementos_poligonais(self.dados, tensoes) + \
                               Estrutura.matrizes_rigidez_barras_tensoes(self.dados, tensoes)
                 self.julia.kelems = self.atualizar_matrizes_rigidez()
 
-                angulos_rot = list(map(lambda x: degrees(abs(x)), self.angulos_rotacao_sistema_principal(deformacoes)))
+                u = self.julia.eval(f'deslocamentos(kelems, dados)')
+                tensoes = Estrutura.tensoes_elementos(self.dados, u, tensoes)
+
+                angulos_rot = list(map(lambda x: degrees(abs(x)), self.angulos_rotacao_sistema_principal(tensoes)))
                 angulo_medio_ant = angulo_medio
                 angulo_medio = sum(angulos_rot) / len(angulos_rot)
                 diferenca_angulos_medios = abs(angulo_medio - angulo_medio_ant)
-
-                u = self.julia.eval(f'deslocamentos(kelems, dados)')
-
-                tensoes = Estrutura.tensoes_elementos(self.dados, u, tensoes)
-                deformacoes = Estrutura.deformacoes_elementos(self.dados, u)
 
                 logger.info(f'c: {c}\t dθ: {diferenca_angulos_medios:.4f}°')
         return u
@@ -511,24 +509,29 @@ class OC:
 
         return x_novo
 
-    def filtro(self, tensoes_ant):
+    def filtro(self, tensoes_ant, parametro_filtro: Optional[float] = 1.1):
 
         logger.info('Iniciando o a aplicação do filtro...')
 
         u = self.deslocamentos_nodais(tensoes_ant)
-        flex_inicial = self.flexibilidade_media(u)
-        rho_a = self.rho[self.dados.num_elementos_poli::]
-        k_bars = self.dados.matrizes_rigidez_barras.copy()
 
-        flex_aumento_max = 1.1
+        # Flexibilidade média inicial
+        flex_inicial = self.flexibilidade_media(u)
+        # Flexibilidade média da última iteração válida
+        flex_ant_valida = flex_inicial
+        # Vetor de áreas normalizadas dos elementos de barra
+        rho_a = self.rho[self.dados.num_elementos_poli::]
+        # Matrizes de rigidez dos elementos de barra
+        k_bars = self.dados.matrizes_rigidez_barras.copy()
 
         logger.info(f'Flexibilidade média inicial:{flex_inicial}\n')
 
         # Intervalos de busca
         a = 0
-        b = max(rho_a)
+        b = np.max(rho_a)
         tol = 1e-4 * (b - a)
 
+        # Aplicação do método da bisseção
         for i in range(50):
             erro = abs((b - a) / 2)
 
@@ -541,23 +544,28 @@ class OC:
                 self.dados.matrizes_rigidez_barras[j] = 0 * self.dados.matrizes_rigidez_barras[j]
 
             u = self.deslocamentos_nodais(tensoes_ant)
-            flex = self.flexibilidade_media(u)
-            logger.info(f'Corte:{c}\t Flexibilidade média:{flex}\t erro:{erro}')
+            # Flexibilidade média na iteração corrente (i)
+            flex_i = self.flexibilidade_media(u)
             # Número de vezes que a compliance aumentou desde a última iteração.
-            flex_aumento = flex / flex_inicial
-            if (erro <= tol) and (flex_aumento <= flex_aumento_max):
+            flex_aumento = flex_i / flex_ant_valida
+            # Log
+            logger.info(f'Corte:{c}\t Flexibilidade média:{flex_i}\t erro:{erro}\t Parâmetro do filtro: {flex_aumento}')
+            # Verificação da convergência
+            if (erro <= tol) and (flex_aumento <= parametro_filtro):
                 self.rho[self.dados.num_elementos_poli + indices] = 0
                 self.x[self.dados.num_nos() + indices] = 0
 
                 logger.success('Filtragem finalizada!')
                 break
-
-            if flex_aumento > flex_aumento_max:
-                b = c
             else:
-                a = c
+                if flex_aumento > parametro_filtro:
+                    b = c
+                else:
+                    a = c
+                    flex_ant_valida = flex_i
 
-    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, num_max_iteracoes=50, aplicar_filtro=True):
+    def otimizar_estrutura(self, erro_max=0.1, passo_p=0.5, parametro_fitro: Optional[float] = None,
+                           salvar_rhos_todas_iteracoes=False):
         """Aplica o processo de otimização aos dados da estrutura.
         TODO inserir uma forma mais limpa de zerar as matrizes de rigidez das barras excluídas
 
@@ -566,7 +574,6 @@ class OC:
             erro_max: Máximo erro percentual permitido para que ocorra a convergência da otimização.
             passo_p: Passo que define os acréscimos ao coeficiente de penalização do modelo SIMP `p`
                 durante a aplicação do método da continuação.
-            num_max_iteracoes: Número máximo de iterações permitidas no processo de otimização.
         """
         logger.info('Iniciando a otimização da estrutura')
 
@@ -616,7 +623,7 @@ class OC:
             # Interface com Julia
             self.julia.p = self.p = p
 
-            for c in np.arange(1, num_max_iteracoes + 1):
+            for c in np.arange(1, OC.NUM_MAX_ITERS + 1):
                 it += 1
                 # As densidades relativas dos elementos são densidades nodais apenas em otimização sem
                 # esquema de projeção. Essa otimização é feita com `tecnica_otimizacao = 0` apenas.
@@ -668,7 +675,9 @@ class OC:
                             f'erro_di: {erro_di:.5f}%\t')
 
                 # Adição dos resultados da iteração aos vetores de resultados.
-                resultados_rho.append(self.rho.copy())
+                if salvar_rhos_todas_iteracoes:
+                    resultados_rho.append(self.rho.copy())
+
                 resultados_gerais.append([c, p, beta, fo, vol_perc, di, erro_u, erro_di, vol_perc_poli,
                                           vol_perc_barras])
 
@@ -699,24 +708,32 @@ class OC:
         # Continuidade no coeficiente de penalização com `beta = 0`.
         for p_i in ps:
             otimizar_p_beta_fixos(p_i, 0)
-
+        self.p = 3
         # Aplicação do filtro para a eliminação de barras pouco influentes
-        if aplicar_filtro:
-            self.filtro(tensoes_ant)
+        if parametro_fitro is not None:
+            self.filtro(tensoes_ant, parametro_fitro)
             tensoes_ant = None
             otimizar_p_beta_fixos(self.p, 0)
 
         # Continuidade em beta.
         if self.tecnica_otimizacao in OC.TECNICA_OTM_EP_HEAVISIDE:
-            self.p = 3
+            # Procedimento de Li e K. (2015)
             # Beta inicial. Adotado 1/3 para que seu primeiro valor seja 0.5.
             # 1.5 * 1/3 = 0.5.
             beta_i = 1 / 3
             while beta_i < OC.BETA_MAX:
-                beta_i = min(1.4 * beta_i, OC.BETA_MAX)
+                di = self.percentual_densidades_intermediarias()
+
+                if di > 5:
+                    beta_i = min(1.5 * beta_i, OC.BETA_MAX)
+                else:
+                    beta_i = min(beta_i + 5, OC.BETA_MAX)
                 otimizar_p_beta_fixos(self.p, beta_i)
 
         # Salvar resultados no arquivo `.zip`.
+        if not salvar_rhos_todas_iteracoes:
+            resultados_rho.append(self.rho.copy())
+
         self.dados.salvar_arquivo_numpy(np.array(resultados_rho), 14)
         self.dados.salvar_arquivo_numpy(np.array(resultados_gerais), 15)
 
