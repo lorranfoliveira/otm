@@ -71,8 +71,8 @@ class Malha:
                 dic[layer] = []
                 for obj_layer in self.layers[layer]:
                     if isinstance(obj_layer, classe_linha):
-                        dic[layer].append(list(map(lambda v: round(v, 3), obj_layer.dxf.start[:2])) + \
-                                          list(map(lambda v: round(v, 3), obj_layer.dxf.end[:2])))
+                        dic[layer].append(np.round(np.array(obj_layer.dxf.start)[:2], 3).tolist() + \
+                                          np.round(np.array(obj_layer.dxf.end)[:2], 3).tolist())
                 dic[layer] = np.array(dic[layer])
         return dic
 
