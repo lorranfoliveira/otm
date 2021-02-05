@@ -260,8 +260,8 @@ class Plot:
                 verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
                 codes = [path.Path.MOVETO, path.Path.LINETO]
 
-                rho = 5 * rho_final[j] / x_bar_max
-                # rho = 3 if rho_final[j] > 0 else 0
+                rho = 15 * rho_final[j] / x_bar_max
+                # rho = 5 if rho_final[j] > 0 else 0
 
                 if rho > 0:
                     if tipo_cmap == 'jet':
@@ -423,7 +423,7 @@ class Plot:
 
         for i, rho_i in enumerate(rho_final):
             if i < self.dados.num_elementos_poli:
-                if abs(rho_i) > 1e-8:
+                if abs(rho_i) > 1e-9:
                     if tensoes[i] >= 0:
                         tensoes_norm[i] = 1
                     else:
@@ -447,7 +447,8 @@ class Plot:
 
         elementos_poli = []
         elementos_barra = []
-        x_bar_max = max(rho_final[self.dados.num_elementos_poli::])
+        x_bar_max = max(rho_final[self.dados.num_elementos_poli::]) if self.dados.tem_barras() else 0
+
         for j, el in enumerate(self.dados.elementos):
             if j < self.dados.num_elementos_poli:
                 elementos_poli.append(patches.Polygon(self.dados.nos[el], linewidth=0, fill=True,
@@ -456,7 +457,7 @@ class Plot:
                 verts = [self.dados.nos[el[0]], self.dados.nos[el[1]]]
                 codes = [path.Path.MOVETO, path.Path.LINETO]
 
-                rho = 10 * rho_final[j] / x_bar_max
+                rho = 15 * rho_final[j] / x_bar_max
                 # rho = 3 if rho_final[j] > 0 else 0
 
                 if rho > 0:
