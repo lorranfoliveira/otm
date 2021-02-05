@@ -18,7 +18,7 @@ class OC:
     # 2 -> Xu et al. (2010).
     METODO_HEAVISIDE = 0
     # Máximo valor que pode ser assumido por beta.
-    BETA_MAX = 200
+    BETA_MAX = 100
     # Quantidade mínima de iterações.
     NUM_MIN_ITERS = 5
     # Quantidade máxima de iterações.
@@ -726,8 +726,11 @@ class OC:
 
                 if di > 5:
                     beta_i = min(1.5 * beta_i, OC.BETA_MAX)
-                else:
+                elif 1 <= di <= 5:
                     beta_i = min(beta_i + 5, OC.BETA_MAX)
+                else:
+                    logger.success('Percentual de densidades intermediárias < 1%')
+                    break
                 otimizar_p_beta_fixos(self.p, beta_i)
 
         # Salvar resultados no arquivo `.zip`.
