@@ -261,7 +261,7 @@ class Plot:
                 codes = [path.Path.MOVETO, path.Path.LINETO]
 
                 rho = 15 * rho_final[j] / x_bar_max
-                # rho = 5 if rho_final[j] > 0 else 0
+                # rho = 6 if rho_final[j] > 0 else 0
 
                 if rho > 0:
                     if tipo_cmap == 'jet':
