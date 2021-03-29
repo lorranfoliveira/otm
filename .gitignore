@@ -122,3 +122,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.idea/
+
+.vscode/
+
+*.zip
+
+*.dxf
+
+ffmpeg/
