@@ -129,6 +129,4 @@ dmypy.json
 
 *.zip
 
-*.dxf
-
 ffmpeg/
