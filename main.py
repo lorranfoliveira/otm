@@ -1,8 +1,5 @@
 import otm
 import pathlib
-from time import time
-from datetime import timedelta
-from otm.otimizador.oc import OC
 from otm.plotagem import Plot
 from otm.dados import Dados
 
@@ -42,8 +39,6 @@ malha.criar_malha(3, 300)
 #
 # t0 = time()
 # otimizador.otimizar_estrutura(erro_max=0.1, passo_p=delta_p, parametro_fitro=1.4)
-# with open(f'{dados.arquivo.stem}_tempo_execucao.txt', 'w') as arq:
-#     arq.write(f'{timedelta(seconds=time() - t0)}')
 #
 plot = Plot(dados)
 plot.plotar_malha()
